@@ -3,12 +3,13 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const manifest=JSON.parse(fs.readFileSync('manifest.webmanifest','utf8'));
-assert.equal(manifest.name,'여섯 줄');
-assert.equal(manifest.short_name,'여섯 줄');
+assert.equal(manifest.name,'기타메이트');
+assert.equal(manifest.short_name,'기타메이트');
 assert.equal(manifest.start_url,'./');
 assert.equal(manifest.scope,'./');
 assert.equal(manifest.display,'standalone');
-for(const icon of [...manifest.icons,{src:'./icons/apple-touch-icon.png',sizes:'180x180'}]){
+for(const icon of [...manifest.icons,{src:'./icons/apple-touch-icon.png',sizes:'180x180'},
+  {src:'./favicon-32.png',sizes:'32x32'},{src:'./favicon-16.png',sizes:'16x16'}]){
   const png=fs.readFileSync(icon.src);
   assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
   assert.equal(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`,icon.sizes);
@@ -16,6 +17,10 @@ for(const icon of [...manifest.icons,{src:'./icons/apple-touch-icon.png',sizes:'
 assert(manifest.icons.some(icon=>icon.purpose==='maskable'));
 const html=fs.readFileSync('index.html','utf8');
 assert(html.includes('href="./manifest.webmanifest"'));
+for(const file of ['favicon.svg','favicon-32.png','favicon-16.png'])assert(html.includes(`href="./${file}"`));
+assert(html.includes('<title>기타메이트 · 기타 연습 도우미</title>'));
+assert(html.includes('name="apple-mobile-web-app-title" content="기타메이트"'));
+assert(fs.readFileSync('favicon.svg','utf8').includes('<title>기타메이트</title>'));
 assert(html.includes("register('./sw.js',{scope:'./'})"));
 const source=fs.readFileSync('sw.js','utf8');
 async function checkScope(scope){
@@ -53,7 +58,7 @@ async function checkScope(scope){
   });
   async function lifecycle(name){let pending;handlers[name]({waitUntil:promise=>{pending=promise;}});await pending;}
   await lifecycle('install');
-  assert(skipped);assert.equal(requests.length,7);
+  assert(skipped);assert.equal(requests.length,10);
   await lifecycle('activate');
   assert(claimed);assert.deepEqual(deleted,[prefix+'old']);
   assert(stored.has('unrelated-app-v1'));
