@@ -5,6 +5,9 @@ const vm=require('node:vm');
 const html=fs.readFileSync('index.html','utf8');
 const script=html.slice(html.indexOf('// Home-screen installation:'),html.indexOf("if('serviceWorker' in navigator"));
 assert.match(html,/<button id="install-button"[^>]* hidden>/);
+assert.match(html.match(/<header>[\s\S]*?<\/header>/)[0],/id="install-button"/);
+assert(!/<footer>[\s\S]*?id="install-button"[\s\S]*?<\/footer>/.test(html));
+assert.equal((html.match(/id="install-button"/g)||[]).length,1);
 assert.match(html,/<form method="dialog"><button autofocus>닫기<\/button>/);
 function setup(userAgent='',installed=false,legacyStandalone=false,maxTouchPoints=0){
   const handlers={},clicks={};
