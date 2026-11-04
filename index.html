@@ -3,13 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#183e35">
+<meta name="theme-color" content="#245b47">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="여섯 줄">
 <title>여섯 줄 · 기타 코드와 튜너</title>
 <style>
 :root{color-scheme:light;--ink:#203a33;--muted:#63746c;--paper:#f6f4ec;--panel:#fffef9;--line:#d9dfd3;--green:#245b47;--lime:#dfea9c;--orange:#b9512c}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;line-height:1.5}button,input{font:inherit}button{cursor:pointer;min-height:44px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;padding:9px 15px}button:hover{background:#edf1e4}button:disabled{opacity:.4;cursor:default}button:focus-visible,input:focus-visible{outline:3px solid #cd8a3d;outline-offset:3px}.wrap{max-width:1120px;margin:auto;padding:36px 24px 24px}header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:32px}.brand{font-size:22px;font-weight:800;letter-spacing:-1px}.brand span{font-weight:400;font-size:14px;letter-spacing:0;margin-left:12px;color:var(--muted)}.badge{font-size:12px;border:1px solid #c4cdbf;border-radius:24px;padding:5px 11px;white-space:nowrap}h1{font-size:clamp(28px,4vw,44px);line-height:1.25;letter-spacing:-1.7px;margin:0 0 12px}p{margin:0}.intro{color:var(--muted);margin-bottom:25px}.search{display:flex;gap:10px;max-width:670px}.search input{min-width:0;flex:1;padding:13px 17px;border:1px solid #a8b8a8;border-radius:10px;background:var(--panel);font-size:20px;color:var(--ink)}.primary{background:var(--green);color:white;border-color:var(--green);font-weight:650}.primary:hover{background:#194a38}.hint{font-size:12px;color:var(--muted);margin:10px 0 0}.error{color:#a12f20;min-height:25px;font-size:14px;margin-top:7px}.quick{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 27px}.quick button{font-size:13px;padding:7px 12px;min-height:38px}.quick button[aria-pressed=true]{background:var(--green);color:white;border-color:var(--green)}.layout{display:grid;grid-template-columns:360px 1fr;gap:20px}.panel{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:24px}.diagram-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.chord-title{font-size:35px;line-height:1.2;letter-spacing:-1px;margin:0}.quality{font-size:13px;color:var(--muted);margin-top:6px}.play{padding:8px 11px;font-size:13px}.diagram{width:100%;max-width:290px;display:block;margin:4px auto 0}.nav{display:flex;justify-content:space-between;align-items:center;gap:6px}.counter{font-size:13px;color:var(--muted);text-align:center}.overline{font-size:12px;letter-spacing:1.1px;font-weight:700;color:var(--muted);margin:0 0 18px}.tones{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:25px}.tone{min-width:64px;background:#eff2e9;padding:12px 16px;border-radius:10px;text-align:center}.tone.root{background:var(--green);color:#fff}.tone strong{display:block;font-size:23px}.tone small{font-size:12px;opacity:.8}.details{border-top:1px solid var(--line);padding-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:18px}.details span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}.details strong{font-size:15px;font-weight:600}.explain{margin-top:24px;font-size:13px;line-height:1.8;color:var(--muted)}.fret-panel{margin-top:20px;padding:24px 0 12px;overflow:hidden}.fret-header{padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.fret-header h2{font-size:18px;margin:0}.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}.legend span{display:flex;gap:5px;align-items:center}.key{width:12px;height:12px;border-radius:50%;background:#a7b49e;display:inline-block}.key.root{background:var(--orange)}.key.current{background:var(--green);outline:2px solid var(--ink);outline-offset:2px}.scroll{overflow-x:auto;overscroll-behavior-x:contain;margin-top:12px;padding:8px 16px 0}.neck{display:block;width:100%;min-width:1010px;height:auto}.scroll-note{font-size:12px;color:var(--muted);padding:5px 24px}.empty{padding:50px 10px;text-align:center;color:var(--muted)}footer{font-size:12px;color:var(--muted);padding:20px 0 8px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}#audio-status{font-size:12px;color:var(--muted);min-height:18px;margin-top:9px}@media(max-width:720px){.wrap{padding:22px 16px}header{margin-bottom:25px}.brand span{display:none}.layout{grid-template-columns:1fr}.panel{padding:20px}.info-panel{padding:22px}.tones{margin-bottom:20px}.details{gap:12px}.explain{margin-top:18px}.fret-panel{padding:20px 0 10px}.fret-header{padding:0 20px}.diagram{max-width:270px}.intro{font-size:14px}.search button{padding:10px 17px}.quick{gap:6px}.quick button{min-height:40px}h1{letter-spacing:-1px}}
 
 [hidden]{display:none!important}.mode-tabs{display:flex;gap:8px;margin-bottom:28px;border-bottom:1px solid var(--line);padding-bottom:12px}.mode-tabs a{flex:1;max-width:220px;text-align:center;text-decoration:none;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:12px;font-weight:650}.mode-tabs a[aria-selected=true]{background:var(--green);color:white;border-color:var(--green)}.mode-tabs a:focus-visible{outline:3px solid #cd8a3d;outline-offset:3px}.tuner-layout{display:grid;grid-template-columns:1.4fr 1fr;gap:20px}.tuner-display{text-align:center}.tuner-target{font-size:15px;color:var(--muted)}.tuner-note{font-size:64px;font-weight:800;line-height:1.2;margin:12px 0 4px;letter-spacing:-2px}.tuner-frequency{color:var(--muted);font-size:14px;min-height:21px}.tuner-gauge{display:block;width:100%;max-width:430px;margin:16px auto 0;color:var(--orange)}.tuner-display.in-tune .tuner-gauge,.tuner-display.in-tune .tuner-advice{color:var(--green)}.tuner-display.waiting .tuner-gauge{color:var(--muted)}#tuner-needle{transform-origin:200px 172px;transition:transform .12s ease-out}.tuner-cents{font-size:22px;font-weight:700;margin-top:2px}.tuner-advice{font-weight:700;color:var(--orange);min-height:24px;margin:8px 0 20px}.tuner-display.waiting .tuner-advice{color:var(--muted)}#mic-status{font-size:13px;color:var(--muted);margin:12px auto 0;max-width:460px;min-height:40px}.tuner-controls h2{font-size:18px;margin:0 0 8px}.string-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 8px}.string-grid button{padding:10px 5px}.string-grid strong{display:block;font-size:22px}.string-grid small{font-size:12px}.string-grid button[aria-pressed=true],#auto-string[aria-pressed=true]{background:var(--green);color:white;border-color:var(--green)}.string-grid button.detected{outline:3px solid var(--orange);outline-offset:1px}.reference-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.reference-grid button{font-size:13px;padding:8px 4px}.tuner-settings{border-top:1px solid var(--line);padding-top:18px;margin-top:22px}.calibration{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px}.calibration input{width:88px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}#reference-status{min-height:20px;font-size:12px;color:var(--muted);margin-top:10px}@media(max-width:720px){.tuner-layout{grid-template-columns:1fr}.mode-tabs a{max-width:none;font-size:14px}.tuner-note{font-size:56px}}@media(prefers-reduced-motion:reduce){#tuner-needle{transition:none}}
 .identify-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.identify-controls input{width:65px;padding:6px;border:1px solid var(--line);border-radius:6px}.identify-candidates{display:grid;gap:10px;padding-left:24px}.identify-candidates button{width:100%;text-align:left}.identify-candidates strong{display:block;font-size:21px}.identify-candidates small{display:block;color:var(--muted);margin-top:4px}.identify-hit{cursor:pointer}.identify-hit:hover rect,.identify-hit:focus rect{fill:#245b4718;stroke:var(--orange);stroke-width:2}.identify-hit:focus{outline:none}
+.mic-sensitivity{display:grid;grid-template-columns:1fr auto;gap:8px;font-size:14px}.mic-sensitivity input{grid-column:1/-1;width:100%;accent-color:var(--green)}
 </style>
 </head>
 <body>
@@ -52,6 +59,7 @@
 <div id="string-select" class="string-grid" role="group" aria-label="수동 줄 선택"></div>
 <p class="hint">주황 테두리는 현재 인식한 줄입니다. 많이 풀린 줄은 직접 선택해 주세요.</p>
 <div class="tuner-settings"><label class="calibration" for="concert-a">A4 기준음 (Hz)<input id="concert-a" type="number" min="430" max="450" step="1" value="440" inputmode="numeric"></label><p class="hint">430–450 Hz · 기본값 440 Hz</p></div>
+<div class="tuner-settings"><label class="mic-sensitivity" for="mic-sensitivity">마이크 감도<output id="mic-gain-value" for="mic-sensitivity">8×</output><input id="mic-sensitivity" type="range" min="1" max="16" step="1" value="8"></label><p class="hint">작은 소리가 잡히지 않으면 높이고, 주변 소음이 잡히면 낮춰 주세요.</p></div>
 <div class="tuner-settings"><h2>기준음 듣기</h2><p class="hint">각 줄의 소리를 듣고 비교하세요. 재생 중에는 마이크 측정을 잠시 쉽니다.</p><div id="reference-tones" class="reference-grid" role="group" aria-label="줄별 기준음 재생"></div><p id="reference-status" role="status"></p></div>
 <p class="hint">조용한 곳에서 다른 줄을 가볍게 막아 주세요. 마이크는 HTTPS 또는 localhost 환경에서 사용할 수 있습니다.</p>
 </section>
@@ -69,7 +77,7 @@
 <section class="panel info-panel" aria-label="코드 판별 결과"><h2 class="overline">CHORD MATCHES · 코드 후보</h2><p id="identify-status" role="status" aria-live="polite"></p><ol id="identify-candidates" class="identify-candidates"></ol><p class="hint">최저음이 근음인 해석을 우선하며, 생략음이 적은 후보를 앞에 표시합니다. 후보를 클릭하면 코드 추천 모드에서 검색합니다.</p></section>
 </div>
 </section>
-<footer>전원이나 연결 없이도, 이 파일 하나로. 소리는 기기의 음량과 무음 설정을 확인해 주세요.</footer>
+<footer>한 번 열어 두면, 오프라인에서도 연습을 이어가세요. 소리는 기기의 음량과 무음 설정을 확인해 주세요.</footer>
 </main>
 <script>
 'use strict';
@@ -402,48 +410,52 @@ v.frets.forEach((f,i)=>{if(f<0)return;const at=now+strum++*.045,freq=440*Math.po
 // YIN: cumulative mean normalized difference, then a parabolic period estimate.
 // Kept independent of the DOM so synthetic signals can exercise the real detector in Node.
 function detectPitch(samples,sampleRate){
-const size=Math.floor(samples.length/2),maxLag=Math.min(size-1,Math.ceil(sampleRate/65)),minLag=Math.max(2,Math.floor(sampleRate/400));
+// Average down to at most 24 kHz to keep the longer buffer inexpensive.
+const stride=Math.max(1,Math.ceil(sampleRate/24000));
+if(stride>1){
+const reduced=new Float32Array(Math.floor(samples.length/stride));
+for(let i=0;i<reduced.length;i++){let sum=0;for(let j=0;j<stride;j++)sum+=samples[i*stride+j];reduced[i]=sum/stride;}
+samples=reduced;sampleRate/=stride;
+}
+const size=Math.floor(samples.length/2),maxLag=Math.min(size-1,Math.ceil(sampleRate/70)+1),minLag=Math.max(2,Math.floor(sampleRate/1000)-1);
 let mean=0;for(const value of samples)mean+=value;mean/=samples.length;
 let energy=0;for(const value of samples)energy+=(value-mean)**2;
-if(Math.sqrt(energy/samples.length)<.007)return null;
+if(Math.sqrt(energy/samples.length)<.00015)return null;
 const difference=new Float64Array(maxLag+1);let sum=0;
 for(let lag=1;lag<=maxLag;lag++){
 let squared=0;for(let i=0;i<size;i++){const delta=samples[i]-samples[i+lag];squared+=delta*delta;}
 sum+=squared;difference[lag]=sum?squared*lag/sum:1;
 }
+let periodLag=0;
 for(let lag=minLag;lag<maxLag;lag++){
-if(difference[lag]>.12)continue;
+if(difference[lag]>.15)continue;
 while(lag+1<maxLag&&difference[lag+1]<difference[lag])lag++;
-if(lag>=maxLag)return null;
-const left=difference[lag-1],center=difference[lag],right=difference[lag+1],curve=left-2*center+right;
-const period=lag+(curve?(left-right)/(2*curve):0),frequency=sampleRate/period;
-return frequency>=65&&frequency<=400?frequency:null;
+periodLag=lag;break;
 }
-return null;
+if(!periodLag||periodLag>=maxLag)return null;
+// A dominant overtone can pass YIN first. Prefer a multiple only when its
+// periodicity is substantially better; pure high notes must retain their octave.
+const firstLag=periodLag;
+for(let multiple=2;multiple<=4;multiple++){
+const expected=firstLag*multiple,radius=Math.ceil(multiple*1.5);
+let best=0;
+for(let lag=Math.max(minLag,expected-radius);lag<Math.min(maxLag,expected+radius+1);lag++){
+if(!best||difference[lag]<difference[best])best=lag;
 }
+if(best&&difference[best]<difference[periodLag]*.25&&difference[periodLag]-difference[best]>.008)periodLag=best;
+}
+const left=difference[periodLag-1],center=difference[periodLag],right=difference[periodLag+1],curve=left-2*center+right;
+const period=periodLag+(curve?(left-right)/(2*curve):0),frequency=sampleRate/period;
+// Allow the interpolation's three-cent error margin at the range edges.
+const edgeTolerance=2**(3/1200);
+return frequency>=70/edgeTolerance&&frequency<=1000*edgeTolerance?Math.max(70,Math.min(1000,frequency)):null;
+}
+
 const stringNames=['E2','A2','D3','G3','B3','E4'];
 const stringFrequency=(index,a=440)=>a*2**((tuning[index]-69)/12);
 const pitchCents=(frequency,target)=>1200*Math.log2(frequency/target);
 function nearestString(frequency,a){let best=0;for(let i=1;i<tuning.length;i++)if(Math.abs(pitchCents(frequency,stringFrequency(i,a)))<Math.abs(pitchCents(frequency,stringFrequency(best,a))))best=i;return best;}
-// Optional regression check: extract this script into a Node VM and call checkPitchDetection().
-function checkPitchDetection(){
-const assert=(ok,message)=>{if(!ok)throw Error(message);};let cases=0,maxError=0,seed=7;
-const noise=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/2**32-.5;};
-for(const rate of [44100,48000,96000])for(const a of [430,440,450])for(let index=0;index<6;index++)for(const cents of [-45,-5,0,5,45])for(const harmonics of [[1],[.3,1,.45,.2]]){
-const target=stringFrequency(index,a),frequency=target*2**(cents/1200),samples=new Float32Array(rate>48000?8192:4096);
-for(let i=0;i<samples.length;i++)samples[i]=.08+harmonics.reduce((sum,level,h)=>sum+.25*level*Math.sin(2*Math.PI*frequency*(h+1)*i/rate+.37),0)+noise()*.002;
-const detected=detectPitch(samples,rate),error=detected===null?Infinity:Math.abs(pitchCents(detected,frequency));
-assert(error<1,`${rate} Hz / ${stringNames[index]} / A4=${a} / ${cents} cents / ${harmonics.length} harmonics: ${error} cents`);
-assert(nearestString(detected,a)===index,'Wrong automatic string');maxError=Math.max(maxError,error);cases++;
-}
-assert(detectPitch(new Float32Array(4096),48000)===null,'Silence detected as pitch');
-assert(detectPitch(new Float32Array(4096).fill(.1),48000)===null,'DC detected as pitch');
-assert(detectPitch(Float32Array.from({length:4096},()=>noise()*.5),48000)===null,'Noise detected as pitch');
-assert(detectPitch(Float32Array.from({length:4096},(_,i)=>.001*Math.sin(2*Math.PI*110*i/48000)),48000)===null,'Very quiet signal detected as pitch');
-assert(Math.abs(pitchCents(440*2**(5/1200),440)-5)<1e-9,'Cents conversion');
-return {cases,maxErrorCents:maxError};
-}
-let concertA=440,selectedString=null,micContext=null,micStream=null,micSource=null,analyser=null,micTimer=null,micRequest=0;
+let concertA=440,selectedString=null,micContext=null,micStream=null,micSource=null,micGain=null,analyser=null,micTimer=null,micRequest=0;
 let recentPitches=[],lastPitchAt=0,referenceUntil=0,playbackRequest=0;
 function resetTuner(){
 recentPitches=[];lastPitchAt=0;
@@ -470,7 +482,8 @@ function stopPlayback(){playbackRequest++;referenceUntil=0;for(const node of pla
 function stopMicrophone(message='마이크가 꺼졌습니다. 다시 켜서 튜닝을 시작하세요.'){
 micRequest++;clearInterval(micTimer);micTimer=null;
 if(micStream)micStream.getTracks().forEach(track=>track.stop());micStream=null;
-if(micSource)micSource.disconnect();micSource=null;analyser=null;
+if(micSource)micSource.disconnect();micSource=null;
+if(micGain)micGain.disconnect();micGain=null;analyser=null;
 if(micContext){micContext.close().catch(()=>{});micContext=null;}
 $('mic-toggle').disabled=false;$('mic-toggle').textContent='마이크 켜기';$('mic-toggle').setAttribute('aria-pressed','false');
 $('mic-status').textContent=message;resetTuner();
@@ -487,7 +500,8 @@ stopPlayback();context=new Audio();micContext=context;await context.resume();
 if(request!==micRequest)return;
 stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
 if(request!==micRequest||$('tuner').hidden||document.hidden){stream.getTracks().forEach(track=>track.stop());return;}
-micStream=stream;micSource=context.createMediaStreamSource(stream);analyser=context.createAnalyser();analyser.fftSize=context.sampleRate>48000?8192:4096;analyser.smoothingTimeConstant=0;micSource.connect(analyser);
+micStream=stream;micSource=context.createMediaStreamSource(stream);analyser=context.createAnalyser();analyser.fftSize=context.sampleRate>48000?16384:8192;analyser.smoothingTimeConstant=0;
+micGain=context.createGain();micGain.gain.value=Number($('mic-sensitivity').value);micSource.connect(micGain);micGain.connect(analyser);
 const samples=new Float32Array(analyser.fftSize);
 $('mic-toggle').disabled=false;$('mic-toggle').textContent='마이크 끄기';$('mic-toggle').setAttribute('aria-pressed','true');
 $('mic-status').textContent='마이크 사용 중 · 한 줄씩 튕겨 주세요. 다른 탭으로 이동하면 마이크가 꺼집니다.';resetTuner();
@@ -496,10 +510,10 @@ context.onstatechange=()=>{if(request===micRequest&&context.state==='suspended')
 micTimer=setInterval(()=>{
 if(performance.now()<referenceUntil){recentPitches=[];return;}
 analyser.getFloatTimeDomainData(samples);const frequency=detectPitch(samples,context.sampleRate),now=performance.now();
-if(frequency===null){recentPitches=[];if(lastPitchAt&&now-lastPitchAt>700)resetTuner();return;}
+if(frequency===null){if(lastPitchAt&&now-lastPitchAt>1800)resetTuner();return;}
 lastPitchAt=now;
 if(recentPitches.length&&Math.abs(pitchCents(frequency,recentPitches.at(-1)))>80)recentPitches=[];
-recentPitches.push(frequency);if(recentPitches.length>5)recentPitches.shift();
+recentPitches.push(frequency);if(recentPitches.length>3)recentPitches.shift();
 if(recentPitches.length>=3)showPitch([...recentPitches].sort((a,b)=>a-b)[Math.floor(recentPitches.length/2)]);
 },80);
 }catch(error){
@@ -528,6 +542,10 @@ osc.onended=()=>{osc.disconnect();gain.disconnect();if(request===playbackRequest
 }catch(_){if(request===playbackRequest)$('reference-status').textContent='소리를 재생할 수 없습니다. 브라우저의 오디오 설정을 확인해 주세요.';}
 });
 });
+$('mic-sensitivity').addEventListener('input',()=>{
+const gain=Number($('mic-sensitivity').value);$('mic-gain-value').textContent=`${gain}×`;
+if(micGain)micGain.gain.setTargetAtTime(gain,micContext.currentTime,.02);
+});
 $('concert-a').addEventListener('change',()=>{const input=$('concert-a');concertA=input.value===''?440:Math.max(430,Math.min(450,Math.round(Number(input.value)||440)));input.value=concertA;stopPlayback();resetTuner();});
 function activateMode(){
 const mode=['chords','tuner','identify'].includes(location.hash.slice(1))?location.hash.slice(1):'chords';
@@ -550,6 +568,9 @@ window.addEventListener('pagehide',()=>{stopMicrophone();stopPlayback();});
 activateMode();
 
 find('C');
+if('serviceWorker' in navigator&&window.isSecureContext){
+window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{});});
+}
 </script>
 </body>
 </html>
