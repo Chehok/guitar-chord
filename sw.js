@@ -1,9 +1,10 @@
 'use strict';
 // Increment when changing any app-shell file so installed copies refresh together.
-const VERSION='v1';
+const VERSION='v3-guitarmate';
+// Keep the storage namespace so activation also removes pre-rebrand caches.
 const CACHE_PREFIX=`six-strings:${self.registration.scope}:`;
 const CACHE_NAME=CACHE_PREFIX+VERSION;
-const APP_FILES=['./','./index.html','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png','./icons/apple-touch-icon.png'];
+const APP_FILES=['./','./index.html','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png','./icons/apple-touch-icon.png','./favicon.svg','./favicon-32.png','./favicon-16.png'];
 const APP_URLS=new Set(APP_FILES.map(path=>new URL(path,self.registration.scope).href));
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
