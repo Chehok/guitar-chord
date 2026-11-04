@@ -15,12 +15,12 @@
 <h1>찾고, 짚고, 연주하세요.</h1>
 <p class="intro">코드 하나에서 시작하는 오늘의 기타 연습.</p>
 <form id="search" class="search"><label class="sr-only" for="chord-input">코드 이름</label><input id="chord-input" value="C" placeholder="코드 이름, 예: F#m, Bb, Cmaj7" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="48"><button class="primary" type="submit">코드 찾기</button></form>
-<p class="hint">장조는 C 또는 Cmajor · 단조는 Cm · 샵 # / 플랫 b · 7, maj7, sus, dim, aug 등</p>
+<p class="hint">장조는 C 또는 Cmajor · 단조는 Cm · 샵 # / 플랫 b · 확장 코드 F#m11, C7(b9,b13) · 슬래시 코드 C/G · 6/9 등</p>
 <p id="error" class="error" role="alert"></p>
 <nav id="quick" class="quick" aria-label="자주 찾는 코드"></nav>
 <div class="layout">
 <section class="panel" aria-label="코드 운지법"><div class="diagram-head"><div><h2 id="chord-title" class="chord-title"></h2><p id="quality" class="quality"></p></div><button id="play" class="play" type="button">♪ 소리 듣기</button></div><div id="diagram"></div><div class="nav"><button id="prev" type="button" aria-label="이전 보이싱">← 이전</button><span id="counter" class="counter" aria-live="polite"></span><button id="next" type="button" aria-label="다음 보이싱">다음 →</button></div><p id="audio-status" role="status"></p></section>
-<section class="panel info-panel" aria-label="코드 구성음"><h2 class="overline">CHORD NOTES · 코드 구성음</h2><div id="tones" class="tones"></div><div class="details"><div><span>현재 운지 · 6번 → 1번 줄</span><strong id="frets"></strong></div><div><span>가장 낮은 음</span><strong id="bass"></strong></div><div><span>튜닝 · 6번 → 1번 줄</span><strong>E A D G B E</strong></div><div><span>보이싱 유형</span><strong id="shape"></strong></div></div><p class="explain">다이어그램은 왼쪽부터 6번 줄(낮은 E)입니다. O는 개방현, X는 치지 않는 줄, 점 안의 숫자는 손가락 번호입니다. 굵은 막대는 한 손가락으로 여러 줄을 누르는 바레입니다.<br>1 검지 · 2 중지 · 3 약지 · 4 소지<br>일부 4화음 이상의 운지에서는 완전5음을 생략합니다.</p></section>
+<section class="panel info-panel" aria-label="코드 구성음"><h2 class="overline">CHORD NOTES · 코드 구성음</h2><div id="tones" class="tones"></div><div class="details"><div><span>현재 운지 · 6번 → 1번 줄</span><strong id="frets"></strong></div><div><span>가장 낮은 음</span><strong id="bass"></strong></div><div><span>튜닝 · 6번 → 1번 줄</span><strong>E A D G B E</strong></div><div><span>보이싱 유형</span><strong id="shape"></strong></div></div><p class="explain">다이어그램은 왼쪽부터 6번 줄(낮은 E)입니다. O는 개방현, X는 치지 않는 줄, 점 안의 숫자는 손가락 번호입니다. 굵은 막대는 한 손가락으로 여러 줄을 누르는 바레입니다.<br>1 검지 · 2 중지 · 3 약지 · 4 소지<br>확장 코드에서는 5음, 근음, 안쪽 확장음을 생략할 수 있으며 현재 운지에 표시합니다.</p></section>
 </div>
 <section class="panel fret-panel" aria-label="전체 기타 지판"><div class="fret-header"><h2>지판에서 찾기</h2><div class="legend"><span><i class="key root"></i>근음</span><span><i class="key"></i>구성음</span><span><i class="key current"></i>현재 운지 (테두리)</span></div></div><div class="scroll" tabindex="0" role="region" aria-label="0부터 15프렛 지판, 좌우로 스크롤"><div id="neck"></div></div><p class="scroll-note">0–15프렛 · 위쪽이 1번 줄(높은 E) · 좁은 화면에서는 좌우로 밀어 보세요.</p></section>
 <footer>전원이나 연결 없이도, 이 파일 하나로. 소리는 기기의 음량과 무음 설정을 확인해 주세요.</footer>
@@ -52,15 +52,54 @@ function parse(text){
 const s=text.trim().replace(/♯/g,'#').replace(/♭/g,'b').replace(/[−–]/g,'-').replace(/\s+/g,'');
 const match=/^([A-Ga-g])([#b]?)(.*)$/.exec(s);
 if(!match)throw Error('코드 이름을 확인해 주세요. A–G로 시작해 주세요. 예: C, F#m, Bb7');
-const root=match[1].toUpperCase()+match[2],raw=match[3];
-const aliases={'':'','M':'','major':'','maj':'','m':'m','minor':'m','min':'m','-':'m','7':'7','M7':'maj7','maj7':'maj7','major7':'maj7','m7':'m7','min7':'m7','minor7':'m7','-7':'m7','sus2':'sus2','sus4':'sus4','sus':'sus4','dim':'dim','°':'dim','o':'dim','aug':'aug','+':'aug','dim7':'dim7','°7':'dim7','o7':'dim7','m7b5':'m7b5','min7b5':'m7b5','ø':'m7b5','ø7':'m7b5','6':'6','M6':'6','m6':'m6','min6':'m6','-6':'m6','9':'9','add9':'add9'};
-const key=Object.prototype.hasOwnProperty.call(aliases,raw)?raw:raw.toLowerCase();
-if(!Object.prototype.hasOwnProperty.call(aliases,key))throw Error('지원하지 않는 코드 종류입니다. 예: m, 7, maj7, m7, sus2, sus4, dim, aug, 6, 9, add9');
-const quality=aliases[key],pc=mod(natural[letters.indexOf(match[1].toUpperCase())]+(match[2]==='#'?1:match[2]==='b'?-1:0));
-return {root,pc,quality,label:root+quality,tones:types[quality].tones};
+const root=match[1].toUpperCase()+match[2];
+const pitch=n=>mod(natural[letters.indexOf(n[0].toUpperCase())]+(n[1]==='#'?1:n[1]==='b'?-1:0));
+let raw=match[3],bassNote=null;
+raw=raw.replace(/\/([A-Ga-g][#b]?)$/,(_,n)=>{bassNote=n[0].toUpperCase()+n.slice(1);return '';});
+// Parentheses and commas group tokens without changing their meaning.
+let tokens=raw.replace(/[(),]/g,'').replace(/^69$/, '6add9').replace(/^6\/9$/, '6add9');
+tokens=tokens.replace(/^minor|^min/,'m').replace(/^major|^maj|^M(?!$)/,'maj').replace(/^-/, 'm');
+if(tokens==='M')tokens='';
+if(/^ø7?$/.test(tokens))tokens='m7b5';
+tokens=tokens.replace(/^[°o]/,'dim').replace(/^\+/,'aug');
+let triad='major',seventh=0,top=0,six=false,majorSeventh=false;
+if(tokens.startsWith('m')&&!tokens.startsWith('maj')){triad='minor';tokens=tokens.slice(1);}
+else if(tokens.startsWith('dim')){triad='dim';tokens=tokens.slice(3);}
+else if(tokens.startsWith('aug')){triad='aug';tokens=tokens.slice(3);}
+if(tokens.startsWith('maj')||tokens.startsWith('M')){majorSeventh=true;tokens=tokens.replace(/^(maj|M)/,'');if(!tokens&&triad==='major')majorSeventh=false;else if(!tokens)seventh=11;}
+const extension=/^(13|11|9|7|6)/.exec(tokens);
+if(extension){top=Number(extension[1]);tokens=tokens.slice(extension[0].length);if(top===6)six=true;else seventh=majorSeventh?11:triad==='dim'?9:10;}
+const tones=new Map([[1,[0,'R',0]],[3,[triad==='major'||triad==='aug'?4:3,triad==='major'||triad==='aug'?'3':'b3',2]],[5,[triad==='dim'?6:triad==='aug'?8:7,triad==='dim'?'b5':triad==='aug'?'#5':'5',4]]]);
+const intervals={2:2,3:4,4:5,5:7,6:9,7:10,9:2,11:5,13:9};
+const put=(degree,alter=0,label)=>{const d=(degree-1)%7;tones.set(degree,[mod(intervals[degree]+alter),label||(alter<0?'b':alter>0?'#':'')+degree,d]);};
+if(seventh)tones.set(7,[seventh,seventh===11?'7':seventh===9?'bb7':'b7',6]);
+if(six)put(6);
+if(top>=9)put(9);if(top>=11)put(11);if(top>=13)put(13);
+const protectedDegrees=new Set();let suspended=false;
+while(tokens){
+const token=/^(sus[24]?|add[#b]?(?:13|11|9|[2-7])|(?:omit|no)(?:13|11|9|[1-7])|[#b](?:13|11|9|[2-7]))/.exec(tokens);
+if(!token)throw Error('코드 종류를 확인해 주세요. 예: F#m11, C7b9b13, Cm(maj7), C6/9, D/F#');
+const t=token[0];tokens=tokens.slice(t.length);
+if(t.startsWith('sus')){tones.delete(3);const d=t==='sus2'?2:4;put(d);protectedDegrees.add(d);suspended=true;}
+else if(/^(omit|no)/.test(t))tones.delete(Number(t.replace(/^(omit|no)/,'')));
+else {const part=t.replace(/^add/,'');const a=part[0]==='b'?-1:part[0]==='#'?1:0;const d=Number(part.replace(/^[#b]/,''));put(d,a);protectedDegrees.add(d);}
+}
+if(top>=9)protectedDegrees.add(top);
+const quality=raw.replace(/[(),]/g,'').replace(/^minor|^min/,'m').replace(/^major|^M(?=\d)/,'maj').replace(/^-/,'m').replace(/^[°o]/,'dim').replace(/^\+/,'aug');
+const aliases={'major':'','maj':'','M':'','maj6':'6','sus':'sus4','ø':'m7b5','ø7':'m7b5','mmaj7':'m(maj7)','mM7':'m(maj7)'};
+const canonical=Object.prototype.hasOwnProperty.call(aliases,quality)?aliases[quality]:quality;
+const ordered=[...tones.entries()].sort((a,b)=>a[0]-b[0]);
+const optional=[];
+// Retain the original seventh/sixth grips that omit the perfect fifth.
+if(tones.size>=4&&tones.has(5)&&tones.get(5)[0]===7&&!protectedDegrees.has(5))optional.push(5);
+if(tones.size>4){
+if(!bassNote&&tones.has(3)&&tones.has(7))optional.push(1);
+if(top===13&&tones.has(11)&&!protectedDegrees.has(11))optional.push(11);
+if(top>=11&&tones.has(9)&&!protectedDegrees.has(9))optional.push(9);}
+return {root,pc:pitch(root),quality:canonical,label:root+canonical+(bassNote?'/'+bassNote:''),tones:ordered.map(e=>e[1]),degrees:ordered.map(e=>e[0]),optional,bassNote,bassPc:bassNote?pitch(bassNote):null,name:types[canonical]?.name||'확장 · 변화 코드',suspended};
 }
 function toneName(chord,interval){const [semitones,,degree]=interval;const i=(letters.indexOf(chord.root[0])+degree)%7;let delta=mod(chord.pc+semitones-natural[i]);if(delta>6)delta-=12;return letters[i]+(delta>0?'#'.repeat(delta):'b'.repeat(-delta));}
-function noteName(chord,pc){const tone=chord.tones.find(t=>mod(chord.pc+t[0])===pc);return tone?toneName(chord,tone):'';}
+function noteName(chord,pc){const tone=chord.tones.find(t=>mod(chord.pc+t[0])===pc);return tone?toneName(chord,tone):chord.bassNote||'';}
 // Hand-checked shapes, low E to high e. A negative fret means a muted string.
 const open={
 A:[['x02220','001230']],Am:[['x02210','002310']],A7:[['x02020','001020']],Amaj7:[['x02120','002130']],Am7:[['x02010','002010']],Asus2:[['x02200','001200']],Asus4:[['x02230','001240']],
@@ -88,7 +127,7 @@ if(indexBarre&&j-k===2&&next===3)j=k+1;
 const group=rest.slice(k,j);if(next>4)return null;group.forEach(o=>fingers[o.i]=next);if(group.length>1)barres.push({fret:group[0].f,from:group[0].i,to:group.at(-1).i,finger:next});next++;k=j;}
 return {fingers,barres};
 }
-function makeVoicings(chord){
+function legacyVoicings(chord){
 const pcs=chord.tones.map(t=>mod(chord.pc+t[0])),seen=new Set(),result=[];
 function add(frets,name,manual){
 const played=frets.map((f,i)=>f<0?null:mod(tuning[i]+f)).filter(p=>p!==null);
@@ -114,6 +153,79 @@ const visit=(k,frets)=>{if(k===count){const all=Array(6).fill(-1);frets.forEach(
 }}}}
 result.sort((a,b)=>a.score-b.score);return result.slice(0,12);
 }
+// A barre can cross higher frets, but never an open or muted string.
+function generatedFingering(frets){
+const fingers=Array(6).fill(0),barres=[];let finger=0;
+for(const fret of [...new Set(frets.filter(f=>f>0))].sort((a,b)=>a-b)){
+for(let i=0;i<6;i++){
+if(frets[i]!==fret||fingers[i])continue;
+let end=i;for(let j=i+1;j<6&&frets[j]>=fret;j++)if(frets[j]===fret)end=j;
+if(++finger>4)return null;
+for(let j=i;j<=end;j++)if(frets[j]===fret)fingers[j]=finger;
+if(end>i)barres.push({fret,from:i,to:end,finger});
+}}
+return {fingers,barres};
+}
+function makeVoicings(chord){
+// Preserve the established grips and their ordering for the original vocabulary.
+const legacy=!chord.bassNote&&types[chord.quality]?legacyVoicings(chord):[];
+const pcs=chord.tones.map(t=>mod(chord.pc+t[0])),allowed=new Set(pcs);
+if(chord.bassPc!==null)allowed.add(chord.bassPc);
+const seen=new Set(),result=[];
+function add(frets,name,manual){
+const key=frets.join(',');if(seen.has(key))return;
+const sounded=frets.flatMap((f,i)=>f<0?[]:[tuning[i]+f]);if(sounded.length<3)return;
+const positive=frets.filter(f=>f>0),low=positive.length?Math.min(...positive):0,high=positive.length?Math.max(...positive):0;
+if(high-low>4||high>15||sounded.some(n=>!allowed.has(mod(n))))return;
+const bass=mod(Math.min(...sounded));if(chord.bassPc!==null&&bass!==chord.bassPc)return;
+const played=new Set(sounded.map(mod));const missing=chord.tones.map((t,i)=>played.has(pcs[i])?-1:i).filter(i=>i>=0);
+if(missing.some(i=>!chord.optional.includes(chord.degrees[i])))return;
+const fing=manual||generatedFingering(frets);if(!fing)return;
+seen.add(key);
+const omitted=missing.map(i=>chord.tones[i][1]);
+const omissionCost=missing.reduce((n,i)=>n+({5:1,1:2,11:3,9:4}[chord.degrees[i]]||0),0);
+result.push({frets:[...frets],...fing,name,bass,omitted,score:(bass===chord.pc?0:100000)+missing.length*10000+omissionCost*100+low*10+high-sounded.length});
+}
+legacy.forEach(v=>add(v.frets,v.name,{fingers:v.fingers,barres:v.barres}));
+// Windows include open strings at every position; permit one interior muted string.
+for(let base=1;base<=15;base++){
+const choices=tuning.map(n=>[-1,...Array.from({length:Math.min(15,base+4)-base+1},(_,j)=>base+j),0].filter(f=>f<0||allowed.has(mod(n+f))));
+const visit=(i,frets,count,gaps,ended)=>{
+if(i===6){if(count>=3)add(frets,'생성 운지');return;}
+if(count+6-i<3)return;
+for(const f of choices[i]){
+if(f<0){visit(i+1,[...frets,f],count,gaps,count>0?true:ended);continue;}
+const nextGaps=gaps+(ended?1:0);if(nextGaps>1)continue;
+visit(i+1,[...frets,f],count+1,nextGaps,false);
+}};
+visit(0,[],0,0,false);
+}
+result.sort((a,b)=>a.score-b.score);
+const preserved=legacy.map(v=>result.find(r=>r.frets.join(',')===v.frets.join(','))).filter(Boolean);
+return [...preserved,...result.filter(v=>!preserved.includes(v))].slice(0,10);
+}
+// Optional regression check: run checkChordVoicings() in a console or Node VM.
+function checkChordVoicings(){
+const assert=(ok,message)=>{if(!ok)throw Error(message);};
+const first={A:'-1,0,2,2,2,0',B:'-1,2,4,4,4,2',Am:'-1,0,2,2,1,0',C:'-1,3,2,0,1,0',G:'3,2,0,0,0,3',F:'1,3,3,2,1,1',E7:'0,2,0,1,0,0',Bm:'-1,2,4,4,3,2',Dmaj7:'-1,-1,0,2,2,2'};
+const names=['F#m11','G#m7b13','Am9','Bm11','C#m7','C/G','E7#9','D/F#','C7b9b13','Cm(maj7)','C6/9',...Object.keys(first)];
+for(const name of names){
+const chord=parse(name),grips=makeVoicings(chord),allowed=new Set(chord.tones.map(t=>mod(chord.pc+t[0])));
+if(chord.bassPc!==null)allowed.add(chord.bassPc);
+assert(grips.length>0,name+': no voicings');
+if(first[name])assert(grips[0].frets.join(',')===first[name],name+': first voicing changed');
+assert(new Set(grips.map(v=>v.frets.join(','))).size===grips.length,name+': duplicate');
+for(const v of grips){
+const notes=v.frets.flatMap((f,i)=>f<0?[]:[tuning[i]+f]),fretted=v.frets.filter(f=>f>0);
+assert(notes.every(n=>allowed.has(mod(n))),name+': non-chord tone');
+assert(v.frets.every(f=>f>=-1&&f<=15),name+': fret range');
+assert(!fretted.length||Math.max(...fretted)-Math.min(...fretted)<=4,name+': span');
+assert(v.fingers.every((f,i)=>v.frets[i]>0?f>=1&&f<=4:f===0),name+': fingers');
+assert(chord.bassPc===null||mod(Math.min(...notes))===chord.bassPc,name+': slash bass');
+assert(chord.tones.every((t,i)=>notes.some(n=>mod(n)===mod(chord.pc+t[0]))||chord.optional.includes(chord.degrees[i])),name+': required tone omitted');
+}}
+return true;
+}
 let current=null,voicings=[],position=0;
 const svg=(body,view,cls,label)=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${view}" class="${cls}" role="img" aria-label="${label}">${body}</svg>`;
 function diagram(v){
@@ -135,16 +247,16 @@ for(let f=0;f<=15;f++){const xx=81+f*62;s+=`<line x1="${xx}" x2="${xx}" y1="30" 
 for(const f of [3,5,7,9,12,15]){if(f===12){for(const yy of [87.5,157.5])s+=`<circle cx="${x(f)}" cy="${yy}" r="4" fill="#c6c7b5"/>`;}else s+=`<circle cx="${x(f)}" cy="122.5" r="4" fill="#c6c7b5"/>`;}
 for(let i=0;i<6;i++){
 s+=`<text x="17" y="${y(i)+4}" text-anchor="middle" font-size="12" fill="#63746c">${['E','A','D','G','B','e'][i]}</text><line x1="43" x2="1011" y1="${y(i)}" y2="${y(i)}" stroke="#a5ac9b" stroke-width="${1+i*.15}"/>`;
-for(let f=0;f<=15;f++){const pc=mod(tuning[i]+f);if(!current.tones.some(t=>mod(current.pc+t[0])===pc))continue;const root=pc===current.pc,selected=v&&v.frets[i]===f;
+for(let f=0;f<=15;f++){const pc=mod(tuning[i]+f),selected=v&&v.frets[i]===f;if(!selected&&!current.tones.some(t=>mod(current.pc+t[0])===pc))continue;const root=pc===current.pc;
 s+=`<circle cx="${x(f)}" cy="${y(i)}" r="${selected?14:12}" fill="${root?'#b9512c':selected?'#245b47':'#dce4d3'}" ${selected?'stroke="#203a33" stroke-width="2.5"':''}/><text x="${x(f)}" y="${y(i)+4}" text-anchor="middle" font-size="${noteName(current,pc).length>2?9:11}" font-weight="${root||selected?700:500}" fill="${root||selected?'#fff':'#3f5548'}">${noteName(current,pc)}</text>`;
 }}
 return svg(s,'0 0 1040 237','neck',`${current.label} 코드 구성음의 전체 지판 위치. 근음은 주황색, 현재 운지는 테두리로 표시.`);}
-function render(){const v=voicings[position];$('chord-title').textContent=current.label;$('quality').textContent=types[current.quality].name;$('diagram').innerHTML=diagram(v);$('counter').textContent=voicings.length?`보이싱 ${position+1}/${voicings.length}`:'보이싱 없음';$('prev').disabled=$('next').disabled=voicings.length<2;$('play').disabled=!v;
+function render(){const v=voicings[position];$('chord-title').textContent=current.label;$('quality').textContent=current.name;$('diagram').innerHTML=diagram(v);$('counter').textContent=voicings.length?`보이싱 ${position+1}/${voicings.length}`:'보이싱 없음';$('prev').disabled=$('next').disabled=voicings.length<2;$('play').disabled=!v;
 $('tones').replaceChildren(...current.tones.map(t=>{const div=document.createElement('div');div.className='tone'+(t[0]===0?' root':'');const strong=document.createElement('strong'),small=document.createElement('small');strong.textContent=toneName(current,t);small.textContent=t[1];div.append(strong,small);return div;}));
-$('frets').textContent=v?v.frets.map(f=>f<0?'X':f).join(' · '):'—';$('bass').textContent=v?noteName(current,v.bass)+(v.bass===current.pc?' · 근음':' · 전위형'):'—';$('shape').textContent=v?v.name:'—';$('neck').innerHTML=neck(v);$('audio-status').textContent='';document.querySelectorAll('#quick button').forEach(b=>b.setAttribute('aria-pressed',String(b.textContent===current.label)));}
+$('frets').textContent=v?v.frets.map(f=>f<0?'X':f).join(' · '):'—';$('bass').textContent=v?noteName(current,v.bass)+(v.bass===current.pc?' · 근음':' · 전위형'):'—';$('shape').textContent=v?v.name+(v.omitted.length?' · 생략: '+v.omitted.join(', '):''):'—';$('neck').innerHTML=neck(v);$('audio-status').textContent='';document.querySelectorAll('#quick button').forEach(b=>b.setAttribute('aria-pressed',String(b.textContent===current.label)));}
 function find(value){try{const parsed=parse(value);const shapes=makeVoicings(parsed);current=parsed;voicings=shapes;position=0;$('error').textContent='';$('chord-input').removeAttribute('aria-invalid');render();}catch(error){$('error').textContent=error.message;$('chord-input').setAttribute('aria-invalid','true');}}
 $('search').addEventListener('submit',e=>{e.preventDefault();find($('chord-input').value);});
-for(const name of 'C D E F G A B Am Bm Dm Em C7 D7 E7 G7 A7 Dmaj7 Cmaj7 Am7 Em7 Dsus2 Dsus4 Asus4 Bdim Caug F#m Bb'.split(' ')){const b=document.createElement('button');b.type='button';b.textContent=name;b.addEventListener('click',()=>{$('chord-input').value=name;find(name);});$('quick').append(b);}
+for(const name of 'C D E F G A B Am Bm Dm Em C7 D7 E7 G7 A7 Dmaj7 Cmaj7 Am7 Em7 Dsus2 Dsus4 Asus4 Bdim Caug F#m Bb F#m11 G#m7b13 Am9 Bm11 C#m7 C/G E7#9 Cmaj9 G13'.split(' ')){const b=document.createElement('button');b.type='button';b.textContent=name;b.addEventListener('click',()=>{$('chord-input').value=name;find(name);});$('quick').append(b);}
 $('prev').addEventListener('click',()=>{if(voicings.length){position=modIndex(position-1);render();}});$('next').addEventListener('click',()=>{if(voicings.length){position=modIndex(position+1);render();}});function modIndex(n){return(n+voicings.length)%voicings.length;}
 let audioContext=null,playing=[];
 $('play').addEventListener('click',async()=>{const v=voicings[position];if(!v)return;try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('unsupported');if(!audioContext)audioContext=new Audio();await audioContext.resume();for(const node of playing){try{node.stop();}catch(_){}}playing=[];const now=audioContext.currentTime+.03;let strum=0;
