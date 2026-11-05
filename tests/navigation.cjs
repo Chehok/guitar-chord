@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const html=fs.readFileSync('index.html','utf8');
-const modes=['chords','tuner','identify'];
+const modes=['chords','tuner','identify','score'];
 const ids=new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]));
 // Native initial fragment navigation must never target a mode's panel.
 for(const mode of modes){
@@ -13,7 +13,7 @@ for(const mode of modes){
   assert.match(html,new RegExp(`id="${mode}-panel"[^>]*aria-labelledby="${mode}-tab"`));
 }
 const script=html.slice(html.indexOf('// Mode hashes are routes'),html.indexOf("window.addEventListener('hashchange',activateMode)"));
-for(const hash of ['', '#chords', '#tuner', '#identify', '#unknown', '#chord-input']){
+for(const hash of ['', '#chords', '#tuner', '#identify', '#score', '#unknown', '#chord-input']){
   const handlers={},location={hash},elements=new Map();
   for(const mode of modes){
     elements.set(`${mode}-panel`,{hidden:false});
@@ -23,7 +23,7 @@ for(const hash of ['', '#chords', '#tuner', '#identify', '#unknown', '#chord-inp
   const history={scrollRestoration:'auto',replaceState(_state,_title,url){location.hash=url;}};
   const context={history,location,$:id=>{
     assert(elements.has(id),`Missing element ${id}`);return elements.get(id);
-  },stopMicrophone(){stoppedMic++;},stopPlayback(){stoppedAudio++;},window:{
+  },openScoreTab(){},stopMicrophone(){stoppedMic++;},stopPlayback(){stoppedAudio++;},window:{
     addEventListener(name,handler){handlers[name]=handler;},
     scrollTo(options){assert.equal(options.behavior,'instant');scrollY=options.top;scrollX=options.left;}
   }};
@@ -44,3 +44,12 @@ for(const hash of ['', '#chords', '#tuner', '#identify', '#unknown', '#chord-inp
   scrollY=250;location.hash='#identify';context.activateMode();assert.equal(scrollY,250);
 }
 console.log('Mode routes, panel accessibility, initial scroll and restored-page handling passed (no browser).');
+// All four tabs participate in keyboard wrapping and Home/End navigation.
+const keyScript=html.slice(html.indexOf("window.addEventListener('hashchange',activateMode)"),html.indexOf("document.addEventListener('visibilitychange'"));
+const tabs=new Map();let focused,selected;
+for(const mode of modes)tabs.set(mode+'-tab',{handlers:{},addEventListener(name,handler){this.handlers[name]=handler;},focus(){focused=mode;},click(){selected=mode;}});
+vm.runInNewContext(keyScript,{window:{addEventListener(){}},activateMode(){},$:id=>tabs.get(id)});
+for(const [from,key,to] of [['chords','ArrowLeft','score'],['score','ArrowRight','chords'],['identify','ArrowRight','score'],['tuner','End','score'],['score','Home','chords']]){
+  tabs.get(from+'-tab').handlers.keydown({key,preventDefault(){}});
+  assert.equal(focused,to);assert.equal(selected,to);
+}
