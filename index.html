@@ -860,10 +860,203 @@ if(!best||weight>best.weight)best={pc,minor,weight};
 }
 return {...transposeScoreKey(best,0),weight:best.weight};
 }
+// OCR helpers are shared verbatim with the Node evaluator; no browser pixel filters.
+function scoreImageSize(width,height,ocr=false){
+const enlarge=ocr?(Math.max(width,height)<1600?3:Math.max(width,height)<2400?2:1):1;
+const scale=Math.min(enlarge,4096/Math.max(width,height),Math.sqrt((ocr?6000000:12000000)/(width*height)));
+return {width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))};
+}
+function scoreOCRParameters(psm='11'){
+return {tessedit_char_whitelist:'ABCDEFGabcdefg#bm0123456789susaddimaugmajMIl+/()♭♯',tessedit_pageseg_mode:psm,preserve_interword_spaces:'1',user_defined_dpi:'300'};
+}
+function scoreOCRConfig(){return {load_system_dawg:'0',load_freq_dawg:'0',load_number_dawg:'0'};}
+function normalizeScoreOCR(value){
+if(typeof value!=='string')return null;
+let text=value.normalize('NFKC').trim().replace(/♭/g,'b').replace(/♯/g,'#').replace(/[⁄∕\\]/g,'/').replace(/\s+/g,'').replace(/^[|:;,]+|[|:;,.]+$/g,'');
+// A lone 0/O is too ambiguous. Only repair a root next to a chord extension.
+text=text.replace(/(^|\/)[0O](?=(?:m|M|maj|dim|sus|[79]))/g,'$1D').replace(/^[a-g](?=[#bmM0-9/])/,(letter)=>letter.toUpperCase());
+text=text.replace(/[3g]us(?=[24]?$)/,'sus');
+if(parseScoreChord(text))return text;
+const digits=text.replace(/[Il]/g,'1');
+if(parseScoreChord(digits))return digits;
+// 1 is not a supported extension; keep genuine 11/13 intact and never repair a bass note.
+const seventh=digits.replace(/^([A-G][#b]?(?:m|M|maj)?)1(?=\/|$)/,'$17');
+return parseScoreChord(seventh)?seventh:null;
+}
+function resizeScorePixels(source,width,height){
+const data=new Uint8ClampedArray(width*height*4),sx=source.width/width,sy=source.height/height;
+const white=(p,channel)=>255+(source.data[p+channel]-255)*source.data[p+3]/255;
+for(let y=0;y<height;y++){
+const fy=Math.max(0,(y+.5)*sy-.5),y0=Math.floor(fy),y1=Math.min(source.height-1,y0+1),dy=fy-y0;
+for(let x=0;x<width;x++){
+const fx=Math.max(0,(x+.5)*sx-.5),x0=Math.floor(fx),x1=Math.min(source.width-1,x0+1),dx=fx-x0;
+const a=(y0*source.width+x0)*4,b=(y0*source.width+x1)*4,c=(y1*source.width+x0)*4,d=(y1*source.width+x1)*4,i=(y*width+x)*4;
+for(let channel=0;channel<3;channel++){
+data[i+channel]=(white(a,channel)*(1-dx)+white(b,channel)*dx)*(1-dy)+(white(c,channel)*(1-dx)+white(d,channel)*dx)*dy;
+}
+data[i+3]=255;
+}
+}
+return {data,width,height};
+}
+function preprocessScorePixels(source,variant){
+const {width,height}=source,n=width*height,data=new Uint8ClampedArray(n*4),gray=new Uint8Array(n),histogram=new Uint32Array(256);
+for(let p=0;p<n;p++){
+const i=p*4,r=source.data[i],g=source.data[i+1],b=source.data[i+2];
+if(variant==='color'){
+const high=Math.max(r,g,b),spread=high-Math.min(r,g,b);
+// Keep saturated ink (including red/orange/blue), discard neutral lyrics/staff lines.
+gray[p]=high>45&&spread>=35&&spread/high>=.22?0:255;
+}else{gray[p]=Math.round(.299*r+.587*g+.114*b);histogram[gray[p]]++;}
+}
+if(variant==='gray'){
+let low=0,high=255,count=0;
+for(;low<254;low++){count+=histogram[low];if(count>0)break;}
+count=0;for(;high>low+1;high--){count+=histogram[high];if(count>n*.01)break;}
+for(let p=0;p<n;p++)gray[p]=Math.max(0,Math.min(255,(gray[p]-low)*255/Math.max(1,high-low)));
+}
+if(variant==='adaptive'){
+// Sliding box mean uses one column array, avoiding a full-size integral image.
+const radius=Math.max(8,Math.round(Math.min(width,height)*.012)),columns=new Uint32Array(width);
+for(let y=0;y<height;y++){
+if(y===0){for(let row=0;row<=Math.min(height-1,radius);row++)for(let x=0;x<width;x++)columns[x]+=gray[row*width+x];}
+else{
+const add=y+radius,remove=y-radius-1;
+for(let x=0;x<width;x++){if(add<height)columns[x]+=gray[add*width+x];if(remove>=0)columns[x]-=gray[remove*width+x];}
+}
+let sum=0;for(let x=0;x<=Math.min(width-1,radius);x++)sum+=columns[x];
+const rows=Math.min(height-1,y+radius)-Math.max(0,y-radius)+1;
+for(let x=0;x<width;x++){
+if(x>0){if(x+radius<width)sum+=columns[x+radius];if(x-radius-1>=0)sum-=columns[x-radius-1];}
+const area=rows*(Math.min(width-1,x+radius)-Math.max(0,x-radius)+1),i=(y*width+x)*4;
+data[i]=data[i+1]=data[i+2]=gray[y*width+x]<sum/area-10?0:255;data[i+3]=255;
+}
+}
+}else for(let p=0;p<n;p++){const i=p*4;data[i]=data[i+1]=data[i+2]=gray[p];data[i+3]=255;}
+return {data,width,height};
+}
+// Connected red glyphs are grouped into chords before enlargement, keeping staff/lyrics out.
+function scoreRedRegions(source){
+const {width,height,data}=source,mask=new Uint8Array(width*height),parts=[];
+for(let p=0;p<mask.length;p++){
+const i=p*4,r=data[i],g=data[i+1],b=data[i+2];
+mask[p]=data[i+3]>128&&r>70&&r-g>40&&r-b>35&&r>g*2?1:0;
+}
+const queue=[];
+for(let p=0;p<mask.length;p++){
+if(!mask[p])continue;
+queue.length=0;queue.push(p);mask[p]=0;
+let x0=width,y0=height,x1=0,y1=0;
+for(let head=0;head<queue.length;head++){
+const q=queue[head],x=q%width,y=Math.floor(q/width);
+x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x+1);y1=Math.max(y1,y+1);
+for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+const nx=x+dx,ny=y+dy,n=ny*width+nx;
+if(nx>=0&&nx<width&&ny>=0&&ny<height&&mask[n]){mask[n]=0;queue.push(n);}
+}
+}
+if(queue.length>=2&&y1-y0<=height*.045&&x1-x0<=width*.12)parts.push({x0,y0,x1,y1});
+}
+const rows=[];
+for(const b of parts.sort((a,b)=>a.y0-b.y0)){
+const cy=(b.y0+b.y1)/2,h=b.y1-b.y0;
+const row=rows.find(row=>Math.abs(row.cy-cy)<Math.max(row.height,h)*.65);
+if(row){row.parts.push(b);row.height=Math.max(row.height,h);}else rows.push({cy,height:h,parts:[b]});
+}
+const regions=[];
+for(const row of rows){
+let box=null;
+for(const b of row.parts.sort((a,b)=>a.x0-b.x0)){
+if(box&&b.x0-box.x1<=row.height*.3){box.x1=Math.max(box.x1,b.x1);box.y0=Math.min(box.y0,b.y0);box.y1=Math.max(box.y1,b.y1);}
+else {box={...b};regions.push(box);}
+}
+}
+const valid=regions.filter(b=>b.y1-b.y0>=Math.max(6,height*.003)&&b.x1-b.x0>=3&&b.y0>height*.08&&b.x1-b.x0<width*.3);
+// Repeated chord rows bound the score, excluding red app logos and controls in screenshots.
+const aligned=valid.filter(b=>valid.some(other=>other!==b&&Math.abs(other.y0-b.y0)<Math.max(b.y1-b.y0,other.y1-other.y0)*.65));
+if(aligned.length<4)return valid;
+const top=Math.min(...aligned.map(b=>b.y0)),bottom=Math.max(...aligned.map(b=>b.y1));
+return valid.filter(b=>b.y0>=top&&b.y1<=bottom);
+}
+function scoreRegionPixels(source,box){
+const pad=6,x0=Math.max(0,box.x0-pad),y0=Math.max(0,box.y0-pad),width=Math.min(source.width,box.x1+pad)-x0,height=Math.min(source.height,box.y1+pad)-y0;
+const data=new Uint8ClampedArray(width*height*4);
+for(let y=0;y<height;y++)data.set(source.data.subarray(((y+y0)*source.width+x0)*4,((y+y0)*source.width+x0+width)*4),y*width*4);
+// Preserve antialiased red edges; hard thresholding fills the small bass-note counters.
+for(let i=0;i<data.length;i+=4){
+const ink=Math.max(0,data[i]-Math.min(data[i+1],data[i+2]));
+const value=255-Math.min(255,ink*1.5);
+data[i]=data[i+1]=data[i+2]=value;data[i+3]=255;
+}
+return resizeScorePixels({data,width,height},width*4,height*4);
+}
+async function runScoreOCRPasses(worker,source,encode,onPass=()=>{},current=()=>true){
+const size=scoreImageSize(source.width,source.height,true),pixels=resizeScorePixels(source,size.width,size.height),candidates=[];
+const passes=scoreOCRPasses(),regions=scoreRedRegions(source),total=passes.length+regions.length;
+await worker.setParameters(scoreOCRParameters());
+for(const [index,variant] of passes.entries()){
+await onPass(index,total,variant);if(!current())return [];
+let image=preprocessScorePixels(pixels,variant);
+const input=await encode(image);image=null;
+if(!current())return [];
+const {data}=await worker.recognize(input);if(!current())return [];
+candidates.push(...scoreOCRWords(data.words||[],size,source,variant));
+}
+for(const [index,bbox] of regions.entries()){
+await onPass(passes.length+index,total,'region');if(!current())return [];
+const input=await encode(scoreRegionPixels(source,bbox));
+let best=null;
+for(const psm of ['7','8']){
+await worker.setParameters(scoreOCRParameters(psm));if(!current())return [];
+const {data}=await worker.recognize(input);if(!current())return [];
+const text=normalizeScoreOCR(data.text||((data.words||[]).map(w=>w.text).join('')));
+const confidence=data.confidence??0;
+if(text&&confidence>=20&&(!best||confidence>best.confidence))best={text,confidence,bbox:{...bbox},variant:'region'};
+if(best&&best.confidence>=75)break;
+}
+if(best)candidates.push(best);
+}
+return mergeScoreOCR(candidates);
+}
+function scoreOCRPasses(){return ['color','gray','adaptive'];}
+function scoreOCRWords(words,processed,source,variant){
+const mapped=words.filter(word=>word.bbox).map(word=>({...word,bbox:{x0:word.bbox.x0*source.width/processed.width,y0:word.bbox.y0*source.height/processed.height,x1:word.bbox.x1*source.width/processed.width,y1:word.bbox.y1*source.height/processed.height}}));
+const joined=[];
+// Tesseract sometimes splits Bb, m7 or /B into separate adjacent words.
+for(let i=0;i<mapped.length;i++){
+let text=mapped[i].text,b={...mapped[i].bbox},confidence=mapped[i].confidence;
+for(let j=i+1;j<Math.min(mapped.length,i+4);j++){
+const next=mapped[j],h=Math.max(b.y1-b.y0,next.bbox.y1-next.bbox.y0),gap=next.bbox.x0-b.x1;
+if(gap<0||gap>h*.65||Math.abs((b.y0+b.y1-next.bbox.y0-next.bbox.y1)/2)>h*.55)break;
+text+=next.text;confidence=Math.min(confidence,next.confidence);b={x0:b.x0,y0:Math.min(b.y0,next.bbox.y0),x1:next.bbox.x1,y1:Math.max(b.y1,next.bbox.y1)};
+if(normalizeScoreOCR(text))joined.push({text,bbox:{...b},confidence});
+}
+}
+const normalized=mapped.map(w=>({...w,text:normalizeScoreOCR(w.text)||w.text}));
+const candidates=filterScoreWords([...normalized,...joined.map(w=>({...w,text:normalizeScoreOCR(w.text)}))],source.width,source.height,variant==='color'?30:48);
+return candidates.map(word=>({...word,variant}));
+}
+function mergeScoreOCR(candidates){
+const area=b=>Math.max(0,b.x1-b.x0)*Math.max(0,b.y1-b.y0);
+const overlap=(a,b)=>Math.max(0,Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0))*Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0))/Math.max(1,Math.min(area(a),area(b)));
+const rank=w=>w.confidence+(w.variant==='region'?18:w.variant==='color'?8:0)+Math.min(w.text.length,8)*2;
+const result=[];
+for(const word of [...candidates].sort((a,b)=>rank(b)-rank(a))){
+if(!result.some(other=>overlap(word.bbox,other.bbox)>.45))result.push(word);
+}
+const rows=[];
+for(const word of result.sort((a,b)=>a.bbox.y0-b.bbox.y0)){
+const b=word.bbox,cy=(b.y0+b.y1)/2;
+const row=rows.find(r=>Math.abs(r.cy-cy)<Math.min(r.height,b.y1-b.y0)*.65);
+if(row)row.words.push(word);else rows.push({cy,height:b.y1-b.y0,words:[word]});
+}
+return rows.flatMap(row=>row.words.sort((a,b)=>a.bbox.x0-b.bbox.x0));
+}
+
 // Geometry and line context are deliberately conservative; manual correction remains available.
-function filterScoreWords(words,width,height){
+function filterScoreWords(words,width,height,minConfidence=48){
 const valid=words.filter(word=>{
-const b=word.bbox;if(!b||!parseScoreChord(word.text)||!(word.confidence>=48))return false;
+const b=word.bbox;if(!b||!parseScoreChord(word.text)||!(word.confidence>=minConfidence))return false;
 const h=b.y1-b.y0,w=b.x1-b.x0;
 return h>=Math.max(6,height*.003)&&h<=height*.045&&w>=2&&w<=width*.3&&b.x0>=0&&b.y0>=0&&b.x1<=width&&b.y1<=height;
 });
@@ -909,16 +1102,17 @@ document.head.append(script);
 }).catch(error=>{scoreLibraryPromise=null;throw error;});
 return scoreLibraryPromise;
 }
-let scoreWorker=null;
+let scoreAbortOCR=null;
 function cancelScoreOCR(){
-scoreState.run++;if(scoreWorker){scoreWorker.terminate().catch(()=>{});scoreWorker=null;}
+scoreState.run++;if(scoreAbortOCR)scoreAbortOCR();
 scoreBusy(false);scoreStatus('자동 인식을 중지했어요. 코드 직접 추가를 누르고 악보에서 위치를 선택해 주세요.');
 }
 async function recognizeScore(){
 if(!scoreState.image||scoreState.busy)return;
 if(navigator.onLine===false){scoreStatus('오프라인에서는 자동 인식 준비가 어려울 수 있어요. 코드 직접 추가로 위치와 코드를 입력하거나, 연결 후 다시 인식해 주세요.');return;}
 const run=++scoreState.run;scoreBusy(true);scoreStatus('자동 인식을 준비합니다. 처음에는 인식 도구를 내려받아 잠시 걸릴 수 있어요.');
-let worker=null,timer,timedOut=false;
+let worker=null,timer,timedOut=false,abort,canvas=null,passIndex=0,passTotal=3,passVariant='color';
+const labels={color:'컬러 글씨 분리',gray:'확대·대비 보정',adaptive:'적응형 이진화',region:'코드 영역 확대'};
 const current=()=>run===scoreState.run&&!timedOut;
 try{
 await Promise.race([(async()=>{
@@ -927,21 +1121,29 @@ worker=await library.createWorker('eng',1,{
 workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
 corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
 langPath:'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
-logger:message=>{if(current()&&message.status==='recognizing text')scoreStatus(`기기 안에서 코드를 읽고 있어요… ${Math.round(message.progress*100)}%`);}
-});
-if(!current()){await worker.terminate();return;}scoreWorker=worker;
-await worker.setParameters({tessedit_char_whitelist:'ABCDEFG#bm0123456789susaddimaugmajM+/()♭♯',tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});
-const {data}=await worker.recognize(scoreState.source);
+logger:message=>{if(current()&&message.status==='recognizing text')scoreStatus(`기기 안에서 코드를 읽고 있어요… ${passIndex+1}/${passTotal} · ${labels[passVariant]} · ${Math.round((passIndex+message.progress)/passTotal*100)}%`);}
+},scoreOCRConfig());
+if(!current()){await worker.terminate();return;}
+canvas=document.createElement('canvas');
+const source=scoreState.source,pixels=source.getContext('2d').getImageData(0,0,source.width,source.height);
+const codes=await runScoreOCRPasses(worker,{data:pixels.data,width:source.width,height:source.height},image=>{
+canvas.width=image.width;canvas.height=image.height;
+const ctx=canvas.getContext('2d'),frame=ctx.createImageData(image.width,image.height);frame.data.set(image.data);ctx.putImageData(frame,0,0);
+return canvas;
+},async(index,total,variant)=>{
+passIndex=index;passTotal=total;passVariant=variant;scoreStatus(`코드 인식 ${index+1}/${total} · ${labels[variant]} 준비 중… ${Math.round(index/total*100)}%`);
+await new Promise(resolve=>setTimeout(resolve,0));
+},current);
 if(!current())return;
-scoreState.codes=filterScoreWords(data.words||[],scoreState.source.width,scoreState.source.height).sort((a,b)=>a.bbox.y0-b.bbox.y0||a.bbox.x0-b.bbox.x0);
+scoreState.codes=codes;
 scoreState.adding=false;$('score-editor').close();renderScore();
 scoreStatus(scoreState.codes.length?`${scoreState.codes.length}개 코드를 찾았어요. 가사나 제목이 섞이지 않았는지 확인하고 잘못 읽은 코드를 눌러 수정해 주세요.`:'코드를 찾지 못했어요. 더 선명한 악보로 시도하거나 코드 직접 추가를 이용해 주세요.');
-})(),new Promise((_,reject)=>{timer=setTimeout(()=>{timedOut=true;reject(Error('OCR timeout'));},90000);})]);
+})(),new Promise((_,reject)=>{timer=setTimeout(()=>{timedOut=true;reject(Error('OCR timeout'));},180000);}),new Promise((_,reject)=>{abort=()=>reject(Error('OCR cancelled'));scoreAbortOCR=abort;})]);
 }catch(_){
 // Timeout also invalidates a worker that is still being created.
 if(run===scoreState.run)scoreStatus('자동 인식을 완료하지 못했어요. 인터넷 연결 또는 브라우저의 인식 도구 지원을 확인해 주세요. 코드 직접 추가로 계속할 수 있어요.');
 }finally{
-clearTimeout(timer);if(worker){worker.terminate().catch(()=>{});if(scoreWorker===worker)scoreWorker=null;}
+clearTimeout(timer);if(scoreAbortOCR===abort)scoreAbortOCR=null;if(canvas){canvas.width=canvas.height=1;}if(worker)worker.terminate().catch(()=>{});
 if(run===scoreState.run)scoreBusy(false);
 }
 }
@@ -1025,8 +1227,8 @@ try{
 await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url;});
 if(run!==scoreState.run)return;
 // Bound decoded canvas memory on phones; every bbox and export uses these same pixels.
-const scale=Math.min(1,4096/Math.max(image.naturalWidth,image.naturalHeight),Math.sqrt(12000000/(image.naturalWidth*image.naturalHeight)));
-const source=document.createElement('canvas');source.width=Math.max(1,Math.round(image.naturalWidth*scale));source.height=Math.max(1,Math.round(image.naturalHeight*scale));
+const size=scoreImageSize(image.naturalWidth,image.naturalHeight),scale=size.width/image.naturalWidth;
+const source=document.createElement('canvas');source.width=size.width;source.height=size.height;
 const ctx=source.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,source.width,source.height);ctx.drawImage(image,0,0,source.width,source.height);
 scoreState.image=image;scoreState.source=source;scoreState.codes=[];scoreState.adding=false;scoreState.original=false;$('score-original').checked=false;$('score-key-select').value='auto';
 $('score-work').hidden=false;$('score-manual-position').hidden=true;scoreBusy(false);renderScore();
