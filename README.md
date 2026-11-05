@@ -20,6 +20,25 @@ node tests/navigation.cjs
 node tests/score.cjs
 ```
 
+악보 OCR 실측(브라우저 없이 Tesseract.js 5.1.1 사용):
+
+```sh
+NODE_PATH=/tmp/ocrt/node_modules OCR_LANG_PATH=/tmp/ocrt \
+  node scripts/ocr-eval.cjs .ref/full-score.png tests/fixtures/full-score-chords.json /tmp/gc-score
+```
+
+현재 검증 환경의 OCR 패키지와 `eng.traineddata`는 `/tmp/ocrt`에 있습니다. 다른 환경의 설치 방법은 `scripts/ocr-eval.cjs` 상단을 참고하세요. 정답 JSON과 결과 접두사는 선택 인자입니다. 정답을 주면 이름과 원본 좌표를 대조하고 누락·오인식·추가 인식이 있으면 종료 코드 1을 반환합니다. 결과 접두사를 주면 판독 원문·좌표·신뢰도·일치 횟수가 담긴 JSON과 위치를 표시한 PNG를 생성합니다. `.ref` 이미지는 추적하거나 커밋하지 않습니다.
+
+2026-11-05 검증에서 `full-score.png`의 빨간 코드를 시각적으로 전수 확인했습니다. 실제 수는 **36개**(줄별 4+7+4+7+2+4+3+5)입니다.
+
+| 라운드 | 인식 개수 | 고유 이름 수 | 고유 이름 |
+| --- | ---: | ---: | --- |
+| 기준선 | 31 | 8 | Am7, CM7, D7sus4, Dm7, G, G/B, G7, GM7 |
+| 보정·개별 이진화 재시도 추가 | 36 | 11 | A/C#, Am7, C/D, CM7, D7sus4, Dm7, G, G/B, G7, GM7, Gm/Bb |
+| 정답 이름·좌표 대조 | 36 | 11 | A/C#, Am7, C/D, CM7, D7sus4, Dm7, G, G/B, G7, GM7, Gm/Bb |
+
+최종 결과는 **36/36**, 누락 0·오인식 0·추가 인식 0입니다(전체 OCR 약 16.6초). 복구한 코드의 원본 좌표 `(x0, y0)`는 `Gm/Bb` (567, 633), (568, 999), (905, 1464), `A/C#` (560, 1619), `C/D` (760, 1619)입니다. 남은 실패 목록은 없습니다. ♭/♯와 슬래시 분모 보정은 OCR에만 적용하며, 신뢰도 20 미만의 판독은 같은 영역에서 두 번 일치해야 채택합니다. 실제 인식기의 신뢰도 수치는 보존합니다.
+
 앱 심볼은 기타 피크 안에 넥·사운드홀·브리지를 담은 기타메이트 마크입니다. 표준 라이브러리만 사용하는 `python3 scripts/generate-icons.py`로 앱 아이콘(192/512px), maskable 아이콘(512px), Apple 터치 아이콘(180px), SVG 파비콘과 PNG 파비콘(32/16px)을 함께 재생성할 수 있습니다. 마크는 maskable 중앙 안전 원 안에 배치됩니다.
 
 디자인은 진녹색·크림을 유지하고 시스템 글꼴, 모바일 한 줄 탭, 키보드 포커스, 44px 이상 컨트롤, `prefers-color-scheme` 다크 모드와 `prefers-reduced-motion` 설정을 지원합니다. 튜너의 큰 음 표시는 연주 중 멀리서도 읽을 수 있도록 유지합니다.

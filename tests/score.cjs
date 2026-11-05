@@ -44,8 +44,18 @@ assert.deepEqual(Array.from(filter(words,1000,1000),w=>w.text),['G','C/E','D7sus
 // OCR repairs stay separate from manual input parsing, and never guess a bare 0.
 const {normalizeScoreOCR:normalize,scoreImageSize:imageSize,resizeScorePixels:resize,preprocessScorePixels:preprocess,scoreOCRWords:ocrWords,mergeScoreOCR:merge}=context;
 for(const [raw,expected] of [[' B♭m7 / F♯ ','Bbm7/F#'],['F＃m7','F#m7'],['G∕B','G/B'],['G\\B','G/B'],['Bb','Bb'],['bm7','Bm7'],['CM1','CM7'],['Cml','Cm7'],['DIl','D11'],['C1','C7'],['0m7','Dm7'],['07','D7'],['CM7','CM7'],['Cm7','Cm7'],['D7sus4','D7sus4'],['C13','C13'],['G7/B','G7/B']])assert.equal(normalize(raw),expected,raw);
+for(const [raw,expected] of [
+['F♭m7/B♯','Fbm7/B#'],['E♭/G♭','Eb/Gb'],['A/C♯','A/C#'],['Gm/B♭','Gm/Bb'],
+['Gm/B6','Gm/Bb'],['Gm/B)','Gm/Bb'],['Gm/g)','Gm/Bb'],['Gm/b)','Gm/Bb'],
+['F6m7','Fbm7'],['B)m7/F','Bbm7/F'],['C6','C6'],['B6','B6'],['C7(b9)','C7(b9)'],
+['A/c','A/C#'],['Alc','A/C#'],['Alcs','A/C#'],['A/ci','A/C#'],['A/C','A/C'],
+['C/i','C/D'],['CiD','C/D'],['GiB','G/B'],['G/b','G/B'],['C/e','C/E'],['C/f#','C/F#'],['C/gb','C/Gb'],['C/g6','C/Gb']
+])assert.equal(normalize(raw),expected,raw);
 for(const raw of ['0','O','1','l','7','a','sing','Amazing','C/0','C/1','C118','Gmumble',null])assert.equal(normalize(raw),null,String(raw));
 assert.equal(parse('CM1'),null,'Manual chord input must not use OCR guesses');
+for(const raw of ['Gm/B6','Gm/g)','Alc','A/c','C/i','CiD'])assert.equal(parse(raw),null,raw);
+assert.equal(parse('A/C').text,'A/C','A literal natural bass must remain natural');
+assert.equal(parse('B6').suffix,'6','A sixth is not a flat');
 assert.deepEqual({...imageSize(437,585,true)},{width:1311,height:1755});
 assert.deepEqual({...imageSize(1800,1000,true)},{width:3286,height:1826});
 assert.deepEqual({...imageSize(8000,4000)},{width:4096,height:2048});
@@ -76,6 +86,9 @@ const screenshot=pixels(200,200,(x,y)=>(((y>=60&&y<68)||(y>=120&&y<128))&&((x>=2
 assert.equal(context.scoreRedRegions(screenshot).length,4,'Repeated chord rows exclude screenshot logos and controls');
 const crop=context.scoreRegionPixels(redScore,regions[0]);
 assert.equal(crop.width,88);assert.equal(crop.height,80);
+const binaryCrop=context.scoreRegionPixels(redScore,regions[0],true);
+assert.equal(binaryCrop.width,crop.width);assert.equal(binaryCrop.height,crop.height);
+assert(binaryCrop.data.every((v,i)=>i%4===3?v===255:v===0||v===255),'Individual region retry uses binary pixels');
 assert.equal(normalize('A/C♯'),'A/C#');assert.equal(normalize('Gm/B♭'),'Gm/Bb');
 assert.equal(normalize('D73us4'),'D7sus4');assert.equal(normalize('G'),'G');assert.equal(normalize('C'),'C');
 // Scaled coordinates, split suffixes and slash tokens are folded before bbox deduplication.
@@ -126,6 +139,24 @@ return {data:{text:regionCalls++?'G':'Gm/B♭',confidence:90}};
 }},redScore,image=>image);
 assert.deepEqual(Array.from(regionResult,w=>w.text),['Gm/Bb','G']);
 assert.equal(regionCalls,2,'Single-character chords survive region OCR without a neighbouring chord');
+
+// Confidence-zero accidentals need matching reads; one unsupported guess stays out.
+let activeRegion=-1,attempt=0;const retryCalls=[];
+const repaired=await context.runScoreOCRPasses({setParameters:async()=>{},recognize:async()=>{
+if(activeRegion<0)return {data:{words:[]}};
+const texts=activeRegion===0?['Gm/g)','Gm/g)']:['C/','C/i','CiD'];
+retryCalls[activeRegion]=(retryCalls[activeRegion]||0)+1;
+return {data:{text:texts[attempt++]||'',confidence:0}};
+}},redScore,image=>image,(_index,_total,name)=>{if(name==='region'){activeRegion++;attempt=0;}});
+assert.deepEqual(Array.from(repaired,w=>w.text),['Gm/Bb','C/D']);
+assert.deepEqual(retryCalls,[2,3],'Unresolved slash bass retries with a binary crop');
+assert(repaired.every(w=>w.confidence===0&&w.support===2),'Consensus preserves the raw OCR confidence');
+activeRegion=-1;attempt=0;
+const unsupported=await context.runScoreOCRPasses({setParameters:async()=>{},recognize:async()=>{
+if(activeRegion<0)return {data:{words:[]}};
+return {data:{text:attempt++===0?'Gm/g)':'noise',confidence:0}};
+}},redScore,image=>image,(_index,_total,name)=>{if(name==='region'){activeRegion++;attempt=0;}});
+assert.equal(unsupported.length,0,'A single confidence-zero repair is insufficient');
 
 let params,terminated=0,recognized=0;const progress=[];
 vm.runInContext("scoreState.source={width:300,height:300,getContext:()=>painter}",context);

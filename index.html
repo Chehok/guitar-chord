@@ -876,6 +876,14 @@ let text=value.normalize('NFKC').trim().replace(/♭/g,'b').replace(/♯/g,'#').
 // A lone 0/O is too ambiguous. Only repair a root next to a chord extension.
 text=text.replace(/(^|\/)[0O](?=(?:m|M|maj|dim|sus|[79]))/g,'$1D').replace(/^[a-g](?=[#bmM0-9/])/,(letter)=>letter.toUpperCase());
 text=text.replace(/[3g]us(?=[24]?$)/,'sus');
+// Italic slash/bass glyphs often become l, i, g) or c (a lost music sharp).
+// These guesses belong only to OCR; manual parsing keeps literal C, G and sixths.
+text=text.replace(/^(.+?)[Il|i]([A-Ga-g](?:[#b]|[is])?)$/,'$1/$2')
+.replace(/\/g\)$/,'/Bb').replace(/\/([A-Ga-g])[)6]$/,(_,note)=>'/'+note.toUpperCase()+'b')
+.replace(/\/c[is]?$/,'/C#').replace(/\/i$/,'/D')
+.replace(/\/([a-g])(?=[#b]?$)/,(_,note)=>'/'+note.toUpperCase())
+.replace(/^([A-G])\)(?=m|M|maj|dim|sus|[579]|\/|$)/,'$1b')
+.replace(/^([A-G])6(?=m|M|maj|dim|sus)/,'$1b');
 if(parseScoreChord(text))return text;
 const digits=text.replace(/[Il]/g,'1');
 if(parseScoreChord(digits))return digits;
@@ -978,7 +986,7 @@ if(aligned.length<4)return valid;
 const top=Math.min(...aligned.map(b=>b.y0)),bottom=Math.max(...aligned.map(b=>b.y1));
 return valid.filter(b=>b.y0>=top&&b.y1<=bottom);
 }
-function scoreRegionPixels(source,box){
+function scoreRegionPixels(source,box,binary=false){
 const pad=6,x0=Math.max(0,box.x0-pad),y0=Math.max(0,box.y0-pad),width=Math.min(source.width,box.x1+pad)-x0,height=Math.min(source.height,box.y1+pad)-y0;
 const data=new Uint8ClampedArray(width*height*4);
 for(let y=0;y<height;y++)data.set(source.data.subarray(((y+y0)*source.width+x0)*4,((y+y0)*source.width+x0+width)*4),y*width*4);
@@ -988,7 +996,9 @@ const ink=Math.max(0,data[i]-Math.min(data[i+1],data[i+2]));
 const value=255-Math.min(255,ink*1.5);
 data[i]=data[i+1]=data[i+2]=value;data[i+3]=255;
 }
-return resizeScorePixels({data,width,height},width*4,height*4);
+const image=resizeScorePixels({data,width,height},width*4,height*4);
+if(binary)for(let i=0;i<image.data.length;i+=4){const value=image.data[i]<180?0:255;image.data[i]=image.data[i+1]=image.data[i+2]=value;}
+return image;
 }
 async function runScoreOCRPasses(worker,source,encode,onPass=()=>{},current=()=>true){
 const size=scoreImageSize(source.width,source.height,true),pixels=resizeScorePixels(source,size.width,size.height),candidates=[];
@@ -1003,16 +1013,21 @@ const {data}=await worker.recognize(input);if(!current())return [];
 candidates.push(...scoreOCRWords(data.words||[],size,source,variant));
 }
 for(const [index,bbox] of regions.entries()){
-await onPass(passes.length+index,total,'region');if(!current())return [];
-const input=await encode(scoreRegionPixels(source,bbox));
-let best=null;
-for(const psm of ['7','8']){
+await onPass(passes.length+index,total,'region',bbox);if(!current())return [];
+let best=null,input;const readings=new Map();
+for(const [attempt,[binary,psm]] of [[false,'7'],[false,'8'],[true,'7'],[true,'8']].entries()){
+if(attempt%2===0)input=await encode(scoreRegionPixels(source,bbox,binary));
 await worker.setParameters(scoreOCRParameters(psm));if(!current())return [];
 const {data}=await worker.recognize(input);if(!current())return [];
 const text=normalizeScoreOCR(data.text||((data.words||[]).map(w=>w.text).join('')));
 const confidence=data.confidence??0;
-if(text&&confidence>=20&&(!best||confidence>best.confidence))best={text,confidence,bbox:{...bbox},variant:'region'};
-if(best&&best.confidence>=75)break;
+if(text){
+const previous=readings.get(text),reading={text,confidence:Math.max(confidence,previous?.confidence??0),support:(previous?.support??0)+1,bbox:{...bbox},variant:'region'};
+readings.set(text,reading);
+best=[...readings.values()].filter(w=>w.confidence>=20||w.support>=2).sort((a,b)=>b.support*10+b.confidence+b.text.length*2-(a.support*10+a.confidence+a.text.length*2))[0]||null;
+}
+// English OCR assigns music accidentals confidence zero; repeated readings still count.
+if(best&&(best.confidence>=75||best.support>=2))break;
 }
 if(best)candidates.push(best);
 }
