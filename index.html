@@ -321,9 +321,9 @@ footer { padding: 24px 0 8px; color: var(--muted); font-size: 12px; line-height:
 <p id="score-key" role="status">감지 키: —</p>
 <p class="hint">키는 코드 빈도와 첫·마지막 코드로 추정합니다. 다른 키라면 직접 선택하세요.</p>
 <label for="score-key-select">원래 키</label> <select id="score-key-select"><option value="auto">자동 감지</option></select>
-<fieldset><legend>변환 방식</legend><div class="score-row"><label><input type="radio" name="score-mode" value="capo" checked> 카포 · 원래 키 유지</label><label><input type="radio" name="score-mode" value="transpose"> 카포 없이 키 올리기</label></div></fieldset>
+<fieldset><legend>변환 방식</legend><div class="score-row"><label><input type="radio" name="score-mode" value="capo" checked> 카포 · 원래 키 유지</label><label><input type="radio" name="score-mode" value="transpose"> 카포 없이 키 바꾸기 (반음 ±)</label></div></fieldset>
 <div id="score-capo-controls"><div class="score-row"><button id="score-capo-minus" type="button" aria-label="카포 한 프렛 내리기">−</button><output id="score-capo-value" aria-live="polite">카포 0</output><button id="score-capo-plus" type="button" aria-label="카포 한 프렛 올리기">+</button></div><div class="score-fret-scroll" tabindex="0" role="region" aria-label="카포 0부터 11프렛 선택, 좌우로 스크롤"><div id="score-frets" class="score-frets" role="group" aria-label="카포 위치"></div></div></div>
-<div id="score-transpose-controls" class="score-row" hidden><button id="score-semi-minus" type="button" aria-label="키 반음 내리기">−</button><output id="score-semi-value" aria-live="polite">0 반음</output><button id="score-semi-plus" type="button" aria-label="키 반음 올리기">+</button></div>
+<div id="score-transpose-controls" class="score-row" hidden><button id="score-semi-minus" type="button" aria-label="키 반음 내리기">−1</button><output id="score-semi-value" aria-live="polite">0 반음</output><button id="score-semi-plus" type="button" aria-label="키 반음 올리기">+1</button></div>
 <p id="score-result-key" class="hint" aria-live="polite"></p>
 <fieldset><legend>코드 표시</legend><div class="score-row"><label><input type="radio" name="score-overlay" value="replace" checked> 교체</label><label><input type="radio" name="score-overlay" value="above"> 위에</label><label><input id="score-original" type="checkbox"> 원본 보기</label></div></fieldset>
 <div class="score-row"><button id="score-add" type="button">코드 직접 추가</button><button id="score-download" type="button" class="primary">PNG 다운로드</button></div>
@@ -824,11 +824,14 @@ const scoreSharps=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const scoreFlats=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
 function parseScoreChord(value){
 if(typeof value!=='string')return null;
-const text=value.trim().replace(/♯/g,'#').replace(/♭/g,'b');
+const text=value.normalize('NFKC').trim().replace(/♯/g,'#').replace(/♭/g,'b');
+if(text.startsWith('(')&&text.endsWith(')')){const inner=parseScoreChord(text.slice(1,-1));return inner?{...inner,text,wrapped:true}:null;}
+const alternative=/^(.+)\(([A-G][^()]*)\)$/.exec(text);
+if(alternative){const primary=parseScoreChord(alternative[1]),other=parseScoreChord(alternative[2]);if(primary&&other)return {...primary,text,alternative:other.text};}
 const match=/^([A-G])([#b]?)([^/]*)(?:\/([A-G])([#b]?))?$/.exec(text);
 if(!match)return null;
 const suffix=match[3];
-if(!/^(?:m(?:maj|M)?|maj|M|dim|aug|\+)?(?:5|6|7|9|11|13)?(?:sus[24]?|add(?:2|4|6|9|11|13)|[#b](?:5|9|11|13)|\((?:(?:add)?(?:2|4|5|6|7|9|11|13)|[#b](?:5|9|11|13))(?:,(?:[#b]?(?:5|9|11|13)))*\))*$/.test(suffix))return null;
+if(!/^(?:m(?:maj|M)?|maj|M|dim|aug|\+)?(?:2|5|6|7|9|11|13)?(?:sus[24]?|add(?:2|4|6|9|11|13)|[#b](?:5|9|11|13)|\((?:(?:sus|add)?(?:2|4|5|6|7|9|11|13)|[#b](?:5|9|11|13))(?:,(?:[#b]?(?:5|9|11|13)))*\))*$/.test(suffix))return null;
 const pc=(letter,acc)=>scoreMod(({C:0,D:2,E:4,F:5,G:7,A:9,B:11})[letter]+(acc==='#'?1:acc==='b'?-1:0));
 return {text,root:pc(match[1],match[2]),suffix,bass:match[4]?pc(match[4],match[5]):null,minor:/^m(?!aj)/.test(suffix)};
 }
@@ -839,7 +842,8 @@ return !!key&&(key.minor?[0,2,3,5,7,10]:[1,3,5,8,10]).includes(key.pc);
 function transposeScoreChord(value,semitones,key){
 const chord=parseScoreChord(value);if(!chord||!Number.isInteger(semitones))return null;
 const names=scorePreferFlats(key)?scoreFlats:scoreSharps;
-return names[scoreMod(chord.root+semitones)]+chord.suffix+(chord.bass===null?'':'/'+names[scoreMod(chord.bass+semitones)]);
+const result=names[scoreMod(chord.root+semitones)]+chord.suffix+(chord.bass===null?'':'/'+names[scoreMod(chord.bass+semitones)])+(chord.alternative?'('+transposeScoreChord(chord.alternative,semitones,key)+')':'');
+return chord.wrapped?'('+result+')':result;
 }
 function transposeScoreKey(key,semitones){
 if(!key)return null;
@@ -883,9 +887,16 @@ function scoreOCRConfig(){return {load_system_dawg:'0',load_freq_dawg:'0',load_n
 function normalizeScoreOCR(value){
 if(typeof value!=='string')return null;
 let text=value.normalize('NFKC').trim().replace(/♭/g,'b').replace(/♯/g,'#').replace(/[⁄∕\\]/g,'/').replace(/\s+/g,'').replace(/^[|:;,]+|[|:;,.]+$/g,'');
+if(parseScoreChord(text))return text;
 // A lone 0/O is too ambiguous. Only repair a root next to a chord extension.
 text=text.replace(/(^|\/)[0O](?=(?:m|M|maj|dim|sus|[79]))/g,'$1D').replace(/^[a-g](?=[#bmM0-9/])/,(letter)=>letter.toUpperCase());
-text=text.replace(/[3g]us(?=[24]?$)/,'sus');
+text=text.replace(/[3g]us(?=[24]?$)/,'sus').replace(/sus[dD](?=\)|$)/,'sus4').replace(/^[12]\.?\s*(?=[A-G])/,'').replace(/^\(+(?=[A-G].*\()/,'');
+text=text.replace(/^([A-G][#b]?(?:m|M|maj)?(?:2|7|9|11|13))([A-G][#b]?)$/,'$1/$2');
+text=text.replace(/^([A-G])[iIl](sus[24])[iIl)]?$/,'$1($2)').replace(/(\/[A-G][#b]?)3$/,'$1').replace(/\/([A-G])4$/,'/$1#');
+if(text.startsWith('(')&&!text.endsWith(')')&&parseScoreChord(text.slice(1)))text+=')';
+if(!text.includes('(')&&!text.includes('/')&&text.endsWith(')')&&parseScoreChord(text.slice(0,-1)))text='('+text;
+if(parseScoreChord(text))return text;
+text=text.replace(/^([A-G])i(?=m)/,'$1#').replace(/^([A-G])[fe]?(sus[24])\)$/,'$1($2)').replace(/^([A-G])[fe]?sus[s5]\)$/,'$1(sus4)');
 // Italic slash/bass glyphs often become l, i, g) or c (a lost music sharp).
 // These guesses belong only to OCR; manual parsing keeps literal C, G and sixths.
 text=text.replace(/^(.+?)[Il|i]([A-Ga-g](?:[#b]|[is])?)$/,'$1/$2')
@@ -983,7 +994,7 @@ if(row){row.parts.push(b);row.height=Math.max(row.height,h);}else rows.push({cy,
 }
 const regions=[];
 for(const row of rows){
-let box=null;
+let box=null,previous=null;
 for(const b of row.parts.sort((a,b)=>a.x0-b.x0)){
 if(box&&b.x0-box.x1<=row.height*.3){box.x1=Math.max(box.x1,b.x1);box.y0=Math.min(box.y0,b.y0);box.y1=Math.max(box.y1,b.y1);}
 else {box={...b};regions.push(box);}
@@ -1010,9 +1021,179 @@ const image=resizeScorePixels({data,width,height},width*4,height*4);
 if(binary)for(let i=0;i<image.data.length;i+=4){const value=image.data[i]<180?0:255;image.data[i]=image.data[i+1]=image.data[i+2]=value;}
 return image;
 }
+// Find five equally spaced horizontal staff lines, independently on facing pages.
+function scoreStaffBands(source){
+const {width,height,data}=source,pages=[];
+let gutter=null;
+if(width>height*1.35){
+let start=-1;
+for(let x=Math.floor(width*.4);x<width*.6;x++){
+let count=0;for(let y=0;y<height;y++)if(data[(y*width+x)*4]<100)count++;
+if(count>height*.8){if(start<0)start=x;}else if(start>=0){if(x-start>width*.005)gutter={x0:start,x1:x};start=-1;}
+}
+}
+if(gutter)pages.push([0,gutter.x0],[gutter.x1,width]);else pages.push([0,width]);
+const staffs=[];
+for(const [left,right] of pages){
+const lines=[];
+for(let y=0;y<height;y++){
+let count=0,x0=right,x1=left;
+for(let x=left;x<right;x++){
+const i=(y*width+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+if((r+g+b)<630&&Math.max(r,g,b)-Math.min(r,g,b)<70){count++;x0=Math.min(x0,x);x1=x+1;}
+}
+if(count<(right-left)*.55)continue;
+const previous=lines.at(-1);
+if(previous&&y-previous.last<=2){previous.sum+=y;previous.count++;previous.last=y;previous.x0=Math.min(previous.x0,x0);previous.x1=Math.max(previous.x1,x1);}
+else lines.push({sum:y,count:1,last:y,x0,x1});
+}
+const ys=lines.filter(l=>l.count<Math.max(4,height*.008)).map(l=>({...l,y:l.sum/l.count}));
+for(let i=0;i+4<ys.length;i++){
+const group=ys.slice(i,i+5),gaps=group.slice(1).map((l,j)=>l.y-group[j].y),gap=(group[4].y-group[0].y)/4;
+if(gap<2||gap>height*.025||gaps.some(g=>Math.abs(g-gap)>Math.max(1.5,gap*.3)))continue;
+staffs.push({page:left,x0:Math.min(...group.map(c=>c.x0)),x1:Math.max(...group.map(c=>c.x1)),top:group[0].y,gap});i+=4;
+}
+}
+return staffs;
+}
+function scoreNeutralInk(r,g,b,strict=false){return r>(strict?110:140)&&r-g>(strict?10:25)&&r-b>(strict?10:25)&&r>g*(strict?1.06:1.15)?255:Math.round(.299*r+.587*g+.114*b);}
+// Connected ink above each staff excludes lyrics, note stems and clipped fragments.
+function scoreStaffRegions(source,staffs){
+const {width,height,data}=source,regions=[];
+for(const staff of staffs){
+const gap=staff.gap,x0=Math.max(0,staff.x0),x1=Math.min(width,staff.x1),y0=Math.max(0,Math.floor(staff.top-gap*8)),y1=Math.max(y0,Math.floor(staff.top-gap*.15)),w=x1-x0,h=y1-y0;
+if(!w||!h)continue;
+let redAbove=0,redBelow=0;
+for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+const i=(y*width+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+if(r>100&&r-g>35&&r-b>30&&r>g*1.25){if(y<staff.top-gap*3.5)redAbove++;else redBelow++;}
+}
+// Strong red annotations above a black row need a stricter mask than subpixel text edges.
+const strictNeutral=redAbove>Math.max(8,gap*gap*.1)&&redAbove>redBelow*2.5;
+const parts={neutral:[],color:[]};
+for(const kind of ['neutral','color']){
+const mask=new Uint8Array(w*h),queue=[];
+for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+const i=((y+y0)*width+x+x0)*4,r=data[i],g=data[i+1],b=data[i+2],spread=Math.max(r,g,b)-Math.min(r,g,b);
+mask[y*w+x]=kind==='neutral'?(scoreNeutralInk(r,g,b,strictNeutral)<195?1:0):(spread>=35&&spread/Math.max(r,g,b)>=.22&&Math.max(r,g,b)>45?1:0);
+}
+// Remove beams and repeat brackets that touch otherwise separate chord letters.
+for(let y=0;y<h;y++){
+let start=-1,last=-1;
+for(let x=0;x<=w;x++){
+if(x<w&&mask[y*w+x]){if(start<0)start=x;last=x;}
+else if(start>=0&&(x-last>1||x===w)){if(last-start>gap*3)for(let k=start;k<=last;k++)mask[y*w+k]=0;start=-1;}
+}
+}
+for(let p=0;p<mask.length;p++){
+if(!mask[p])continue;
+queue.length=0;queue.push(p);mask[p]=0;let ax=w,ay=h,bx=0,by=0;
+for(let head=0;head<queue.length;head++){
+const q=queue[head],x=q%w,y=Math.floor(q/w);ax=Math.min(ax,x);ay=Math.min(ay,y);bx=Math.max(bx,x+1);by=Math.max(by,y+1);
+for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+const nx=x+dx,ny=y+dy,n=ny*w+nx;
+if(nx>=0&&nx<w&&ny>=0&&ny<h&&mask[n]){mask[n]=0;queue.push(n);}
+}
+}
+if(queue.length>=2&&ay>0&&by<h&&by-ay<=gap*5&&bx-ax<=gap*18){
+let paren=null;
+if((bx-ax)<(by-ay)*.65&&(by-ay)>gap*.8){
+const sums=[0,0,0],counts=[0,0,0];
+for(const q of queue){const y=Math.floor(q/w),section=Math.min(2,Math.floor((y-ay)*3/(by-ay)));sums[section]+=q%w;counts[section]++;}
+if(counts.every(Boolean)){const centers=sums.map((sum,i)=>sum/counts[i]),bend=centers[1]-(centers[0]+centers[2])/2;
+if(Math.abs(centers[0]-centers[2])<(bx-ax)*.55&&Math.abs(bend)>(bx-ax)*.12)paren=bend<0?'(':')';}
+}
+parts[kind].push({x0:ax+x0,y0:ay+y0,x1:bx+x0,y1:by+y0,pixels:queue.length,paren});
+}
+}
+}
+const roots=kind=>parts[kind].filter(b=>b.y1-b.y0>=gap*.9&&b.x1-b.x0>=gap*.45);
+const black=roots('neutral'),colored=roots('color');
+// Ink closer to the staff wins over handwritten transposition notes above it.
+const baseline=list=>list.length?list.map(b=>b.y1).sort((a,b)=>b-a)[Math.floor(list.length*.2)]:0;
+const mass=list=>list.reduce((sum,b)=>sum+b.pixels,0);
+const kind=colored.length>=2&&(mass(colored)>mass(black)*1.1||baseline(colored)>baseline(black)+gap*1.2)&&!(black.length>=3&&baseline(black)>baseline(colored)+gap*.7)?'color':'neutral';
+const rows=[];
+for(const b of parts[kind].sort((a,b)=>(b.y1-b.y0)-(a.y1-a.y0))){
+const cy=(b.y0+b.y1)/2,bh=b.y1-b.y0;
+const row=rows.find(r=>Math.abs(r.cy-cy)<Math.max(r.height,bh)*.6);
+if(row){row.parts.push(b);row.height=Math.max(row.height,bh);}else rows.push({cy,height:bh,parts:[b]});
+}
+for(const row of rows){
+if(row.height<gap*.9||row.height>gap*4.5)continue;
+const ends=row.parts.map(b=>b.y1).sort((a,b)=>a-b),heights=row.parts.map(b=>b.y1-b.y0).sort((a,b)=>a-b),baseline=ends[Math.floor(ends.length/2)],median=heights[Math.floor(heights.length/2)];
+for(const b of row.parts)b.y1=Math.min(b.y1,Math.ceil(baseline+median*.3));
+let box=null,previous=null;
+for(const b of row.parts.sort((a,b)=>a.x0-b.x0)){
+if(box&&(b.x0-box.x1<row.height*.23||(b.x0-box.x1<row.height*.8&&((previous?.paren==='('&&previous.y1-previous.y0>row.height*.6)||(b.paren===')'&&b.y1-b.y0>row.height*.6))))){box.x1=Math.max(box.x1,b.x1);box.y0=Math.min(box.y0,b.y0);box.y1=Math.max(box.y1,b.y1);}
+else {box={...b,ink:kind,strictNeutral,page:staff.page,staff:staff.top,staffLeft:staff.x0,gap,row:Math.round(row.cy)};regions.push(box);}
+previous=b;
+}
+}
+}
+return regions.filter(b=>b.y1-b.y0>=b.gap*.9&&b.x1-b.x0>=b.gap*.45);
+}
+function scoreStaffCrop(source,box,binary=false){
+const pad=Math.max(3,Math.ceil(box.gap*.5)),x0=Math.max(0,box.x0-pad),y0=Math.max(0,box.y0-pad),width=Math.min(source.width,box.x1+pad)-x0,height=Math.min(source.height,box.y1+pad)-y0,data=new Uint8ClampedArray(width*height*4);
+for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+const i=((y+y0)*source.width+x+x0)*4,j=(y*width+x)*4,r=source.data[i],g=source.data[i+1],b=source.data[i+2],spread=Math.max(r,g,b)-Math.min(r,g,b);
+let value=box.ink==='color'?255-Math.min(255,spread*2):scoreNeutralInk(r,g,b,box.strictNeutral);
+if(binary)value=value<180?0:255;
+data[j]=data[j+1]=data[j+2]=value;data[j+3]=255;
+}
+const scale=Math.min(8,Math.max(2,64/(box.y1-box.y0)));
+return resizeScorePixels({data,width,height},Math.round(width*scale),Math.round(height*scale));
+}
+
+// Give raised extensions a common baseline before an independent OCR retry.
+function flattenScoreGlyphs(image){
+const {width,height,data}=image,mask=new Uint8Array(width*height),parts=[],queue=[];
+for(let p=0;p<mask.length;p++)mask[p]=data[p*4]<200?1:0;
+for(let p=0;p<mask.length;p++){
+if(!mask[p])continue;queue.length=0;queue.push(p);mask[p]=0;let x0=width,y0=height,x1=0,y1=0;
+for(let head=0;head<queue.length;head++){
+const q=queue[head],x=q%width,y=Math.floor(q/width);x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x+1);y1=Math.max(y1,y+1);
+for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy,n=ny*width+nx;if(nx>=0&&nx<width&&ny>=0&&ny<height&&mask[n]){mask[n]=0;queue.push(n);}}
+}
+if(queue.length>=4&&y1-y0>=height*.15)parts.push({x0,y0,x1,y1});
+}
+if(!parts.length)return image;
+parts.sort((a,b)=>a.x0-b.x0);
+const target=40,pad=12,widths=parts.map(b=>Math.max(2,Math.round((b.x1-b.x0)*target/(b.y1-b.y0)))),w=widths.reduce((a,b)=>a+b,0)+pad*2+(parts.length-1)*3,h=target+pad*2,out=new Uint8ClampedArray(w*h*4).fill(255);
+let dx=pad;
+for(const [index,b] of parts.entries()){
+const sw=b.x1-b.x0,sh=b.y1-b.y0,pixels=new Uint8ClampedArray(sw*sh*4);
+for(let y=0;y<sh;y++)pixels.set(data.subarray(((y+b.y0)*width+b.x0)*4,((y+b.y0)*width+b.x1)*4),y*sw*4);
+const scaled=resizeScorePixels({data:pixels,width:sw,height:sh},widths[index],target);
+for(let y=0;y<target;y++)out.set(scaled.data.subarray(y*widths[index]*4,(y+1)*widths[index]*4),((y+pad)*w+dx)*4);
+dx+=widths[index]+3;
+}
+return {width:w,height:h,data:out};
+}
+
+function scoreRegionSignature(source,box){
+const width=box.x1-box.x0,height=box.y1-box.y0,data=new Uint8ClampedArray(width*height*4);
+for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+const i=((y+box.y0)*source.width+x+box.x0)*4,j=(y*width+x)*4,r=source.data[i],g=source.data[i+1],b=source.data[i+2],spread=Math.max(r,g,b)-Math.min(r,g,b);
+const value=box.ink==='color'?255-Math.min(255,spread*2):scoreNeutralInk(r,g,b,box.strictNeutral);
+data[j]=data[j+1]=data[j+2]=value;data[j+3]=255;
+}
+return {aspect:width/height,pixels:resizeScorePixels({width,height,data},64,32).data};
+}
+function scoreSignatureMatch(a,b){
+if(Math.abs(Math.log(a.aspect/b.aspect))>.15)return 0;
+let intersection=0,union=0;
+for(let i=0;i<a.pixels.length;i+=4){const x=255-a.pixels[i],y=255-b.pixels[i];intersection+=Math.min(x,y);union+=Math.max(x,y);}
+return intersection/Math.max(1,union);
+}
+
 async function runScoreOCRPasses(worker,source,encode,onPass=()=>{},current=()=>true){
-const size=scoreImageSize(source.width,source.height,true),pixels=resizeScorePixels(source,size.width,size.height),candidates=[];
-const passes=scoreOCRPasses(),regions=scoreRedRegions(source),total=passes.length+regions.length;
+const size=scoreImageSize(source.width,source.height,true),candidates=[],samples=[],fragments=[];
+const staffs=scoreStaffBands(source),staffRegions=scoreStaffRegions(source,staffs);
+const redRegions=(!staffs.length||source.width>1000)?scoreRedRegions(source):[],legacyRed=source.width>1000&&redRegions.length>=20;
+const useStaff=staffs.length&&!legacyRed;
+const passes=useStaff?[]:scoreOCRPasses(),regions=useStaff?staffRegions:redRegions,total=passes.length+regions.length;
+const pixels=passes.length?resizeScorePixels(source,size.width,size.height):null;
 await worker.setParameters(scoreOCRParameters());
 for(const [index,variant] of passes.entries()){
 await onPass(index,total,variant);if(!current())return [];
@@ -1020,28 +1201,83 @@ let image=preprocessScorePixels(pixels,variant);
 const input=await encode(image);image=null;
 if(!current())return [];
 const {data}=await worker.recognize(input);if(!current())return [];
-candidates.push(...scoreOCRWords(data.words||[],size,source,variant));
+if(!useStaff)candidates.push(...scoreOCRWords(data.words||[],size,source,variant));
 }
 for(const [index,bbox] of regions.entries()){
 await onPass(passes.length+index,total,'region',bbox);if(!current())return [];
-let best=null,input;const readings=new Map();
-for(const [attempt,[binary,psm]] of [[false,'7'],[false,'8'],[true,'7'],[true,'8']].entries()){
-if(attempt%2===0)input=await encode(scoreRegionPixels(source,bbox,binary));
+let best=null,input,numericReads=0;const readings=new Map(),suffixReadings=new Map(),rootHints=new Map();
+const trials=useStaff?[[false,'7'],[false,'8'],[true,'7'],[true,'8'],['flat','7'],['flat','8'],[false,'13'],[false,'6']]:[[false,'7'],[false,'8'],[true,'7'],[true,'8']];
+for(const [attempt,[binary,psm]] of trials.entries()){
+if(attempt%2===0){const crop=useStaff?scoreStaffCrop(source,bbox,binary===true):scoreRegionPixels(source,bbox,binary);input=await encode(binary==='flat'?flattenScoreGlyphs(crop):crop);}
 await worker.setParameters(scoreOCRParameters(psm));if(!current())return [];
 const {data}=await worker.recognize(input);if(!current())return [];
-const text=normalizeScoreOCR(data.text||((data.words||[]).map(w=>w.text).join('')));
+const rawText=(data.text||((data.words||[]).map(w=>w.text).join(''))).normalize('NFKC').trim().replace(/\s+/g,'');
+if(/^\d+[.]?$/.test(rawText))numericReads++;
+const hint=/^[([]?([A-G])/.exec(rawText)?.[1];if(hint)rootHints.set(hint,(rootHints.get(hint)||0)+1);
+const text=normalizeScoreOCR(rawText)||(useStaff&&/^[acdefg]$/.test(rawText)?rawText.toUpperCase():null);
+const suffix=rawText.replace(/^m[1Il]$/,'m7').replace(/sus[dD]$/,'sus4');
+if(useStaff&&/^(?:[#b]|m(?:7|9|11)?|M7|maj7|sus[24]|add[249]|[2579]|\/[A-G][#b]?)$/.test(suffix)){
+const previous=suffixReadings.get(suffix);suffixReadings.set(suffix,{text:suffix,support:(previous?.support||0)+1,confidence:Math.max(previous?.confidence||0,data.confidence||0),bbox});
+}
 const confidence=data.confidence??0;
 if(text){
-const previous=readings.get(text),reading={text,confidence:Math.max(confidence,previous?.confidence??0),support:(previous?.support??0)+1,bbox:{...bbox},variant:'region'};
+const previous=readings.get(text),reading={text,confidence:Math.max(confidence,previous?.confidence??0),support:(previous?.support??0)+1,styles:[...new Set([...(previous?.styles||[]),binary==='flat'?'flat':binary?'binary':'gray'])],bbox:{...bbox},variant:'region'};
 readings.set(text,reading);
 best=[...readings.values()].filter(w=>w.confidence>=20||w.support>=2).sort((a,b)=>b.support*10+b.confidence+b.text.length*2-(a.support*10+a.confidence+a.text.length*2))[0]||null;
 }
 // English OCR assigns music accidentals confidence zero; repeated readings still count.
-if(best&&(best.confidence>=75||best.support>=2))break;
+if(!useStaff&&best&&(best.confidence>=75||best.support>=2))break;
 }
-if(best)candidates.push(best);
+if(useStaff){
+const options=[...readings.values()].filter(r=>r.styles.some(style=>style!=='flat')||![...readings.values()].some(other=>other!==r&&other.styles.some(style=>style!=='flat')&&r.text.startsWith(other.text)));
+for(const reading of options)if(reading.confidence<20&&reading.support<2&&options.some(other=>other!==reading&&reading.text.startsWith(other.text)&&other.support>=1))reading.corroborated=true;
+best=options.filter(w=>w.confidence>=20||w.support>=2||w.corroborated||bbox.ink==='color').sort((a,b)=>(b.support*2+b.confidence*.05+b.text.length*12)-(a.support*2+a.confidence*.05+a.text.length*12))[0]||null;
 }
-return mergeScoreOCR(candidates);
+if(useStaff){const suffix=[...suffixReadings.values()].filter(r=>r.support>=2||r.confidence>=40).sort((a,b)=>b.support-a.support||b.text.length-a.text.length)[0];if(suffix)fragments.push(suffix);}
+if(useStaff)samples.push({bbox,numericReads,rootHint:[...rootHints].sort((a,b)=>b[1]-a[1])[0]?.[0],readings:[...readings.values()],best,signature:scoreRegionSignature(source,bbox)});
+else if(best)candidates.push(best);
+}
+if(useStaff){
+// Repeated printed glyphs corroborate readings across the page, without a chord dictionary.
+const clusters=[];
+for(const sample of [...samples].sort((a,b)=>Math.max(0,...b.readings.map(r=>r.confidence))-Math.max(0,...a.readings.map(r=>r.confidence)))){
+const threshold=(a,b)=>{
+const longest=sample=>sample.readings.map(r=>r.text).sort((x,y)=>y.length-x.length)[0];
+const first=longest(a),second=longest(b),clean=text=>text.replace(/[#b()]/g,'');
+if(!first||!second)return a.rootHint&&a.rootHint===b.rootHint?.6:.96;
+const one=clean(first),two=clean(second);
+if(!one.startsWith(two)&&!two.startsWith(one))return first.length===1&&second.length===1?.88:.96;
+if(first.length!==second.length)return .55;
+return first.length===1&&second.length===1?.64:Math.max(first.length,second.length)<=2?.9:.64;
+};
+const cluster=clusters.map(group=>({group,similarity:group[0].bbox.ink===sample.bbox.ink?scoreSignatureMatch(group[0].signature,sample.signature):0})).filter(({group,similarity})=>similarity>threshold(group[0],sample)).sort((a,b)=>b.similarity-a.similarity)[0]?.group;
+if(cluster)cluster.push(sample);else clusters.push([sample]);
+}
+for(const group of clusters){
+const votes=new Map();
+for(const sample of group)for(const reading of sample.readings){const old=votes.get(reading.text);votes.set(reading.text,{...reading,support:(old?.support||0)+reading.support,confidence:Math.max(old?.confidence||0,reading.confidence),styles:[...new Set([...(old?.styles||[]),...reading.styles])]});}
+const choices=[...votes.values()].filter(r=>(r.support>=3||r.confidence>=75)&&(r.styles.some(style=>style!=='flat')||(r.confidence>=85&&r.support>=2))).sort((a,b)=>b.text.length-a.text.length||b.support-a.support||b.confidence-a.confidence);
+const shared=group.length>=2?choices[0]:null;
+for(const sample of group){if(sample.numericReads>=4&&sample.bbox.x0<sample.bbox.staffLeft+sample.bbox.gap*3)continue;const selected=shared||sample.best;if(selected){const local=sample.readings.find(r=>r.text===selected.text);candidates.push({...selected,confidence:local?.confidence??0,support:local?.support??0,...(shared?{templateSupport:shared.support,templateReadConfidence:shared.confidence}:{}),bbox:{...sample.bbox},variant:'region'});}}
+}
+}
+if(useStaff)for(const fragment of fragments){
+const b=fragment.bbox;
+const left=candidates.filter(c=>c.bbox.staff===b.staff&&c.bbox.x1<=b.x0&&b.x0-c.bbox.x1<Math.max(c.bbox.y1-c.bbox.y0,b.y1-b.y0)*1.2&&Math.abs((c.bbox.y0+c.bbox.y1-b.y0-b.y1)/2)<Math.max(c.bbox.y1-c.bbox.y0,b.y1-b.y0)*.8).sort((a,c)=>c.bbox.x1-a.bbox.x1)[0];
+if(left&&parseScoreChord(left.text+fragment.text)){
+left.text+=fragment.text;left.bbox={...left.bbox,x1:b.x1,y0:Math.min(left.bbox.y0,b.y0),y1:Math.max(left.bbox.y1,b.y1)};
+}
+}
+const geometric=useStaff?mergeScoreOCR(candidates.filter(c=>{
+const aspect=(c.bbox.x1-c.bbox.x0)/(c.bbox.y1-c.bbox.y0);
+return aspect<=c.text.length*1.25;
+})):candidates;
+const filtered=useStaff?geometric.filter(c=>{
+const b=c.bbox,rowRegions=regions.filter(r=>r.staff===b.staff&&r.row===b.row),rowCodes=geometric.filter(w=>w.bbox.staff===b.staff&&w.bbox.row===b.row);
+return rowCodes.length>=rowRegions.length*(b.ink==='color'?.4:.6)&&(b.staff-(b.y0+b.y1)/2<b.gap*5.5||(rowCodes.length>=3&&rowCodes.length>=rowRegions.length*.8));
+}):geometric;
+const merged=mergeScoreOCR(filtered);
+return useStaff&&staffs.some(s=>s.page>0)?[...new Set(staffs.map(s=>s.page))].sort((a,b)=>a-b).flatMap(page=>merged.filter(c=>c.bbox.page===page)):merged;
 }
 function scoreOCRPasses(){return ['color','gray','adaptive'];}
 function scoreOCRWords(words,processed,source,variant){
@@ -1163,7 +1399,7 @@ if(!current())return;
 scoreState.codes=codes;
 scoreState.adding=false;$('score-editor').close();renderScore();
 scoreStatus(scoreState.codes.length?`${scoreState.codes.length}개 코드를 찾았어요. 가사나 제목이 섞이지 않았는지 확인하고 잘못 읽은 코드를 눌러 수정해 주세요.`:'코드를 찾지 못했어요. 더 선명한 악보로 시도하거나 코드 직접 추가를 이용해 주세요.');
-})(),new Promise((_,reject)=>{timer=setTimeout(()=>{timedOut=true;reject(Error('OCR timeout'));},180000);}),new Promise((_,reject)=>{abort=()=>reject(Error('OCR cancelled'));scoreAbortOCR=abort;})]);
+})(),new Promise((_,reject)=>{timer=setTimeout(()=>{timedOut=true;reject(Error('OCR timeout'));},300000);}),new Promise((_,reject)=>{abort=()=>reject(Error('OCR cancelled'));scoreAbortOCR=abort;})]);
 }catch(_){
 // Timeout also invalidates a worker that is still being created.
 if(run===scoreState.run)scoreStatus('자동 인식을 완료하지 못했어요. 인터넷 연결 또는 브라우저의 인식 도구 지원을 확인해 주세요. 코드 직접 추가로 계속할 수 있어요.');
