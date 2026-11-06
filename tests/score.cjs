@@ -134,6 +134,7 @@ const documentHandlers={};
 const head=new Element(),ui=script.slice(script.indexOf('// Score editor: images'),script.indexOf('// Mode hashes are routes'));
 Object.assign(context,{painter,$,document:{addEventListener:(name,handler)=>{documentHandlers[name]=handler;},createElement:()=>new Element(),head,querySelectorAll:()=>[]},window:{},navigator:{onLine:true},setTimeout,clearTimeout,localStorage:{getItem:()=>null}});
 vm.runInContext(ui,context);
+context.loadScoreRecognizer=async()=>{throw Error('Exercise legacy fallback in DOM doubles');};
 assert.equal(head.children.length,0,'OCR must not download at app startup');
 context.openScoreTab();assert.equal(head.children.length,0,'Guide alone must not download OCR');
 assert.equal($('score-frets').children.length,12);

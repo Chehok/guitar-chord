@@ -6,7 +6,7 @@
 // Python 3 + Pillow provide image I/O only. All OCR/preprocessing uses the app's JS.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm');
 const {execFile}=require('node:child_process');
-const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'index.html'),'utf8'),context=vm.createContext({});
+const root=path.join(__dirname,'..'),html=fs.readFileSync(process.env.OCR_APP_HTML||path.join(root,'index.html'),'utf8'),context=vm.createContext({});
 vm.runInContext(html.slice(html.indexOf('// Score music functions:'),html.indexOf('// End score music functions.')),context);
 function python(code,args=[],input){return new Promise((resolve,reject)=>{
 const child=execFile('python3',['-c',code,...args],{encoding:'buffer',maxBuffer:240*1024*1024},(error,stdout)=>error?reject(error):resolve(stdout));
@@ -45,7 +45,7 @@ const total=expected.count??expected.chords.length,correct=matched.length;
 return {expected:total,correct,precision:result.length?correct/result.length:0,recall:correct/total,missing,wrong,extra:[...remaining],matched,lines};
 }
 async function recognize(worker,filename,expected,output){
-const started=Date.now(),attempts=[];
+const started=Date.now(),attempts=[],stages={};
 const raw=await python('from PIL import Image\nimport sys,struct\nim=Image.open(sys.argv[1]).convert("RGBA")\nsys.stdout.buffer.write(struct.pack(">II",*im.size)+im.tobytes())',[filename]);
 const original={width:raw.readUInt32BE(0),height:raw.readUInt32BE(4),data:raw.subarray(8)};
 if(expected&&(expected.width!==original.width||expected.height!==original.height))throw Error('Fixture dimensions differ from original.');
@@ -56,10 +56,15 @@ const {data}=await worker.recognize(input);
 attempts.push({pass:++pass,variant,psm,bbox:regionBox,text:data.text,confidence:data.confidence,...(process.env.OCR_DEBUG?{words:(data.words||[]).map(({text,confidence,bbox})=>({text,confidence,bbox}))}:{})});
 if(process.env.OCR_VERBOSE)console.log(`${path.basename(filename)} ${pass} ${variant} PSM${psm}: ${data.text.replace(/\n/g,' ')}`);
 return {data};}};
-const codes=await context.runScoreOCRPasses(adapter,source,encode,(_index,_total,name,bbox)=>{variant=name;regionBox=bbox||null;});
+if(worker.recognizeRegion)adapter.recognizeRegion=async image=>{
+const {data}=await worker.recognizeRegion(image);
+attempts.push({pass:++pass,variant,engine:'paddle',psm:null,bbox:regionBox,text:data.text,confidence:data.confidence,secondary:data.secondary});
+return {data};
+};
+const codes=await context.runScoreOCRPasses(adapter,source,encode,(_index,_total,name,bbox)=>{variant=name;regionBox=bbox||null;},()=>true,process.env.OCR_DIAGNOSTICS?(name,value)=>{stages[name]=JSON.parse(JSON.stringify(value));}:null);
 const result=codes.map(c=>({...c,bbox:{x0:c.bbox.x0*original.width/source.width,y0:c.bbox.y0*original.height/source.height,x1:c.bbox.x1*original.width/source.width,y1:c.bbox.y1*original.height/source.height}}));
 const evaluation=expected?evaluate(result,expected):null;
-const report={image:filename,width:original.width,height:original.height,source:{width:source.width,height:source.height},count:result.length,seconds:(Date.now()-started)/1000,codes:result,evaluation,attempts};
+const report={image:filename,width:original.width,height:original.height,source:{width:source.width,height:source.height},count:result.length,seconds:(Date.now()-started)/1000,codes:result,evaluation,attempts,...(process.env.OCR_DIAGNOSTICS?{stages}:{})};
 if(output){fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output+'.json',JSON.stringify(report,null,2)+'\n');
 // Row fixtures have no invented per-chord boxes; mark actual OCR only.
 await python('from PIL import Image,ImageDraw\nimport sys,json\nim=Image.open(sys.argv[1]).convert("RGB");d=ImageDraw.Draw(im)\nfor c in json.load(sys.stdin):\n b=c["bbox"];d.rectangle((b["x0"]-2,b["y0"]-2,b["x1"]+2,b["y1"]+2),outline="green",width=2);d.text((b["x0"],b["y0"]-15),c["text"],fill="green")\nim.save(sys.argv[2])',[filename,output+'.png'],JSON.stringify(result));}
@@ -87,5 +92,5 @@ else console.log(r.codes.map(c=>c.text).join(' '));
 if(all){const summary=table(reports);console.log('\n'+summary);fs.writeFileSync(path.join(output,'summary.md'),summary+'\n');fs.writeFileSync(path.join(output,'summary.json'),JSON.stringify(reports.map(({attempts,codes,...r})=>r),null,2)+'\n');}
 }finally{if(worker)await worker.terminate();fs.rmSync(cache,{recursive:true,force:true});}
 }
-module.exports={evaluate,table};
+module.exports={evaluate,table,recognize,context,encode};
 if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});
