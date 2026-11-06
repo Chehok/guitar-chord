@@ -35,10 +35,24 @@ function make(contexts,audioSession){
   await assert.rejects(none.prepareAudio(),/unsupported/);
   t=make([{resumeTo:'running'}],undefined);await t.sandbox.prepareAudio();
   const bad={set type(v){throw Error('x');},get type(){return 'auto';}};t=make([{resumeTo:'running'}],bad);await t.sandbox.prepareAudio();
+  {
+    const calls=[];const param=()=>({value:0,setValueAtTime(){},linearRampToValueAtTime(v){calls.push(['ramp',v]);},exponentialRampToValueAtTime(){},cancelScheduledValues(){calls.push(['cancel']);},setTargetAtTime(v){calls.push(['target',v]);}});
+    const node=name=>({name,gain:param(),frequency:param(),threshold:param(),knee:param(),ratio:param(),attack:param(),release:param(),connected:[],connect(n){this.connected.push(n);},disconnect(){},start(){},stop(){calls.push(['osc-stop']);},addEventListener(){}});
+    const ctx={currentTime:1,destination:{name:'dest'},createGain:()=>node('gain'),createOscillator:()=>node('osc'),createDynamicsCompressor:()=>node('comp')};
+    const box={window:{},navigator:{},setTimeout,tuning:[40,45,50,55,59,64]};
+    vm.runInNewContext(code+';this.sc=scheduleChord;this.sr=scheduleReference;',box);
+    const tones=box.sc(ctx,[-1,3,2,0,1,0],1);
+    assert.equal(tones.length,5,'muted strings are skipped');
+    assert.equal(ctx.chordBus.connected[0].name,'comp');assert(ctx.chordBus.connected[0].connected.includes(ctx.destination),'bus reaches the speakers through the compressor');
+    const peaks=calls.filter(c=>c[0]==='ramp').map(c=>c[1]);assert(peaks.every(v=>Math.abs(v-.45/Math.sqrt(5))<1e-9),'per-string peak is normalised by string count');
+    assert(.45/Math.sqrt(5)*5*(1+1/4+1/9+1/16)>1,'unlimited sum could exceed full scale, so the limiter matters');
+    calls.length=0;tones[0].voice.stop();assert(calls.some(c=>c[0]==='target'&&c[1]===0)&&calls.some(c=>c[0]==='osc-stop'),'stop fades before stopping');
+    const bus=ctx.chordBus;box.sr(ctx,110,1);assert.equal(ctx.chordBus,bus,'one bus is reused');
+  }
   // source wiring
   assert.equal((html.match(/await prepareAudio\(\)/g)||[]).length,2,'chord and tuner buttons share the helper');
   assert.match(html,/setAudioSession\('auto'\);context=new Audio\(\)/,'mic start restores the automatic session');
   assert(!/\.play\(\)\s*;?\s*\}\s*\)\s*;?\s*\/\/ autoplay/.test(html));
-  assert.match(html,/\[1,\.5,\.35,\.2\]\.forEach/);
+  assert.match(html,/\[1,\.5,\.35,\.2\],\.025/,'reference overtones kept');
   console.log('Audio preparation: resume, interrupted recovery, failure reporting and session type passed (mocked, no browser).');
 })().catch(error=>{console.error(error);process.exitCode=1;});

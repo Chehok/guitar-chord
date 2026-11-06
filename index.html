@@ -281,12 +281,13 @@ footer { padding: 24px 0 8px; color: var(--muted); font-size: 12px; line-height:
 <p class="hint">장조는 C 또는 Cmajor · 단조는 Cm · 샵 # / 플랫 b · 확장 코드 F#m11, C7(b9,b13) · 슬래시 코드 C/G · 6/9 등</p>
 <p id="error" class="error" role="alert"></p>
 <section id="chord-filter" class="chord-filter" aria-label="코드 추천 필터">
-<div class="filter-head"><h2 class="overline">코드 추천 필터</h2><button id="filter-reset" type="button">초기화 (C · M)</button></div>
+<div class="filter-head"><h2 class="overline">코드 추천 필터</h2><button id="filter-reset" type="button">초기화 (C · M · 일반)</button></div>
 <div class="filter-group" role="group" aria-labelledby="root-filter-label"><span id="root-filter-label" class="filter-label">1. 기본음</span><div id="root-filter" class="chips"></div></div>
 <div class="filter-group" role="group" aria-labelledby="kind-filter-label"><span id="kind-filter-label" class="filter-label">2. 코드 종류</span><div id="kind-filter" class="chips"></div></div>
+<div class="filter-group" role="group" aria-labelledby="bass-filter-label"><span id="bass-filter-label" class="filter-label">3. 베이스음 (슬래시 뒤 음 · 예: C/G의 G)</span><div id="bass-filter" class="chips"></div></div>
 <p id="filter-status" class="filter-status" role="status" aria-live="polite"></p>
 <nav id="quick" class="quick results" aria-label="필터에 맞는 코드"></nav>
-<p id="filter-empty" class="hint" hidden>조건에 맞는 코드가 없습니다. 기본음이나 코드 종류를 바꾸거나 초기화해 주세요.</p>
+<p id="filter-empty" class="hint" hidden>조건에 맞는 코드가 없습니다. (기본음과 같은 음은 베이스음으로 고를 수 없어요.) 필터를 바꾸거나 초기화해 주세요. 위 코드 카드는 이전에 선택한 코드입니다.</p>
 </section>
 <div class="layout">
 <section class="panel" aria-label="코드 운지법"><div class="diagram-head"><div><h2 id="chord-title" class="chord-title"></h2><p id="quality" class="quality"></p></div><button id="play" class="play" type="button">소리 듣기</button></div><div id="diagram"></div><div class="nav"><button id="prev" type="button" aria-label="이전 보이싱">← 이전</button><span id="counter" class="counter" aria-live="polite"></span><button id="next" type="button" aria-label="다음 보이싱">다음 →</button></div><p id="audio-status" role="status"></p></section>
@@ -663,7 +664,7 @@ return svg(s,'0 0 1040 237','neck',`${current.label} 코드 구성음의 전체 
 function render(){const v=voicings[position];$('chord-title').textContent=current.label;$('quality').textContent=current.name;$('diagram').innerHTML=diagram(v);$('counter').textContent=voicings.length?`보이싱 ${position+1}/${voicings.length}`:'보이싱 없음';$('prev').disabled=$('next').disabled=voicings.length<2;$('play').disabled=!v;
 $('tones').replaceChildren(...current.tones.map(t=>{const div=document.createElement('div');div.className='tone'+(t[0]===0?' root':'');const strong=document.createElement('strong'),small=document.createElement('small');strong.textContent=toneName(current,t);small.textContent=t[1];div.append(strong,small);return div;}));
 $('frets').textContent=v?v.frets.map(f=>f<0?'X':f).join(' · '):'—';$('bass').textContent=v?noteName(current,v.bass)+(v.bass===current.pc?' · 근음':' · 전위형'):'—';$('shape').textContent=v?v.name+(v.omitted.length?' · 생략: '+v.omitted.join(', '):''):'—';$('neck').innerHTML=neck(v);$('audio-status').textContent='';document.querySelectorAll('#quick button').forEach(b=>b.setAttribute('aria-pressed',String(b.textContent===current.label)));}
-function syncFilters(chord){const kind=filterKinds.find(k=>k.quality===chord.quality);if(chord.bassNote||!kind||!filterRoots.includes(chord.root))return;if(filterRoot!=='all'||filterKind!=='all'){filterRoot=chord.root;filterKind=kind.label;}if(typeof renderFilters==='function'&&document.getElementById('root-filter'))renderFilters();}
+function syncFilters(chord){const kind=filterKinds.find(k=>k.quality===chord.quality),bass=chord.bassNote||'none';if(!kind||!filterRoots.includes(chord.root)||(bass!=='none'&&!filterRoots.includes(bass)))return;if(!chordFilterResults(filterRoot,filterKind,filterBass).includes(chord.label)){filterRoot=chord.root;filterKind=kind.label;filterBass=bass;}if(document.getElementById('root-filter'))renderFilters();}
 function find(value){try{const parsed=parse(value);const shapes=makeVoicings(parsed);current=parsed;voicings=shapes;position=0;syncFilters(parsed);$('error').textContent='';$('chord-input').removeAttribute('aria-invalid');render();}catch(error){$('error').textContent=error.message;$('chord-input').setAttribute('aria-invalid','true');}}
 let identifyFrets=Array(6).fill(-1),identifyStart=1;
 const displayChord=name=>name.replace(/#/g,'♯').replace(/b/g,'♭');
@@ -703,29 +704,38 @@ $('search').addEventListener('submit',e=>{e.preventDefault();find($('chord-input
 // Chord filter functions:
 const filterRoots=['C','D','E','F','G','A','B','C#','D#','F#','G#','A#'];
 const filterKinds=[['M','',''],['m','m','m'],['7','7','7'],['M7','maj7','maj7'],['m7','m7','m7'],['sus2','sus2','sus2'],['sus4','sus4','sus4'],['dim','dim','dim'],['aug','aug','aug'],['6','6','6'],['m6','m6','m6'],['add9','add9','add9'],['9','9','9'],['m9','m9','m9'],['m11','m11','m11'],['dim7','dim7','dim7'],['m7b5','m7b5','m7b5']].map(([label,suffix,quality])=>({label,suffix,quality}));
-function chordFilterResults(root,kind){
+const filterPc={C:0,D:2,E:4,F:5,G:7,A:9,B:11,'C#':1,'D#':3,'F#':6,'G#':8,'A#':10};
+// bass: 'none' = plain chord without slash, 'all' = plain chord plus every slash bass, or one note name.
+function chordFilterResults(root,kind,bass='none'){
   const roots=root==='all'?filterRoots:filterRoots.filter(r=>r===root),kinds=kind==='all'?filterKinds:filterKinds.filter(k=>k.label===kind);
+  const basses=bass==='none'?[null]:bass==='all'?[null,...filterRoots]:filterRoots.filter(n=>n===bass);
   const names=[];
-  for(const r of roots)for(const k of kinds)try{const c=parse(r+k.suffix);if(c.root===r&&c.quality===k.quality&&!c.bassNote)names.push(c.label);}catch(_){}
+  for(const r of roots)for(const k of kinds)for(const b of basses){
+    if(b&&filterPc[b]===filterPc[r])continue;
+    try{const c=parse(r+k.suffix+(b?'/'+b:''));if(c.root===r&&c.quality===k.quality&&(b?c.bassNote===b:!c.bassNote))names.push(c.label);}catch(_){}
+  }
   return names;
 }
 // End chord filter functions.
-let filterRoot='C',filterKind='M';
+let filterRoot='C',filterKind='M',filterBass='none';
+const filterListLimit=96;
 function filterButton(text,pressed,onClick,label){const b=document.createElement('button');b.type='button';b.textContent=text;b.setAttribute('aria-pressed',String(pressed));if(label)b.setAttribute('aria-label',label);b.addEventListener('click',onClick);return b;}
 function renderFilters(){
-  $('root-filter').replaceChildren(filterButton('전체',filterRoot==='all',()=>setFilters('all',filterKind),'모든 기본음'),...filterRoots.map(r=>filterButton(r,filterRoot===r,()=>setFilters(r,filterKind))));
-  $('kind-filter').replaceChildren(filterButton('전체',filterKind==='all',()=>setFilters(filterRoot,'all'),'모든 코드 종류'),...filterKinds.map(k=>filterButton(k.label,filterKind===k.label,()=>setFilters(filterRoot,k.label))));
-  const names=chordFilterResults(filterRoot,filterKind);
-  $('quick').replaceChildren(...names.map(name=>filterButton(name,current&&current.label===name,()=>{$('chord-input').value=name;find(name);})));
+  const word=(value,all)=>value==='all'?'전체':value==='none'?'일반(슬래시 없음)':value;
+  $('root-filter').replaceChildren(filterButton('전체',filterRoot==='all',()=>setFilters('all',filterKind,filterBass),'모든 기본음'),...filterRoots.map(r=>filterButton(r,filterRoot===r,()=>setFilters(r,filterKind,filterBass))));
+  $('kind-filter').replaceChildren(filterButton('전체',filterKind==='all',()=>setFilters(filterRoot,'all',filterBass),'모든 코드 종류'),...filterKinds.map(k=>filterButton(k.label,filterKind===k.label,()=>setFilters(filterRoot,k.label,filterBass))));
+  $('bass-filter').replaceChildren(filterButton('일반',filterBass==='none',()=>setFilters(filterRoot,filterKind,'none'),'일반 코드, 슬래시 베이스 없음'),filterButton('전체',filterBass==='all',()=>setFilters(filterRoot,filterKind,'all'),'일반 코드와 모든 베이스음'),...filterRoots.map(n=>filterButton(n,filterBass===n,()=>setFilters(filterRoot,filterKind,n),`베이스음 ${n}`)));
+  const names=chordFilterResults(filterRoot,filterKind,filterBass),shown=names.slice(0,filterListLimit);
+  $('quick').replaceChildren(...shown.map(name=>filterButton(name,current&&current.label===name,()=>{$('chord-input').value=name;find(name);})));
   $('filter-empty').hidden=names.length>0;$('quick').hidden=!names.length;
-  $('filter-status').textContent=`기본음 ${filterRoot==='all'?'전체':filterRoot} + 종류 ${filterKind==='all'?'전체':filterKind} → ${names.length}개`+(names.length===1?` · ${names[0]}`:'');
+  $('filter-status').textContent=`기본음 ${word(filterRoot)} + 종류 ${word(filterKind)} + 베이스 ${word(filterBass)} → ${names.length}개`+(names.length===1?` · ${names[0]}`:'')+(names.length>shown.length?` (앞의 ${shown.length}개만 표시 · 필터를 좁혀 보세요)`:'');
   return names;
 }
-function setFilters(root,kind){
-  filterRoot=root;filterKind=kind;const names=renderFilters();
+function setFilters(root,kind,bass=filterBass){
+  filterRoot=root;filterKind=kind;filterBass=bass;const names=renderFilters();
   if(names.length&&!(current&&names.includes(current.label))){$('chord-input').value=names[0];find(names[0]);}
 }
-$('filter-reset').addEventListener('click',()=>{setFilters('C','M');if($('chord-input').value!=='C'||!current||current.label!=='C'){$('chord-input').value='C';find('C');}});
+$('filter-reset').addEventListener('click',()=>{setFilters('C','M','none');if($('chord-input').value!=='C'||!current||current.label!=='C'){$('chord-input').value='C';find('C');}});
 renderFilters();
 $('prev').addEventListener('click',()=>{if(voicings.length){position=modIndex(position-1);render();}});$('next').addEventListener('click',()=>{if(voicings.length){position=modIndex(position+1);render();}});function modIndex(n){return(n+voicings.length)%voicings.length;}
 let audioContext=null,playing=[];
@@ -743,8 +753,27 @@ if(await resumeAudio(audioContext))return audioContext;
 throw Error('audio-not-running');
 }
 const audioFailure='소리를 재생할 수 없습니다. 같은 버튼을 한 번 더 눌러 다시 시도하고, 계속되면 페이지를 새로고침해 주세요.';
-$('play').addEventListener('click',async()=>{const v=voicings[position];if(!v)return;try{await prepareAudio();if($('chords-panel').hidden)return;for(const node of playing){try{node.stop();}catch(_){}}playing=[];const now=audioContext.currentTime+.03;let strum=0;
-v.frets.forEach((f,i)=>{if(f<0)return;const at=now+strum++*.045,freq=440*Math.pow(2,(tuning[i]+f-69)/12);const gain=audioContext.createGain();gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.105,at+.008);gain.gain.exponentialRampToValueAtTime(.0001,at+2.4);gain.connect(audioContext.destination);for(let h=1;h<=4;h++){const osc=audioContext.createOscillator(),level=audioContext.createGain();osc.type='sine';osc.frequency.setValueAtTime(freq*h,at);level.gain.value=1/(h*h);osc.connect(level);level.connect(gain);osc.start(at);osc.stop(at+2.5);osc.onended=()=>{osc.disconnect();level.disconnect();if(h===4)gain.disconnect();};playing.push(osc);}});$('audio-status').textContent='현재 보이싱을 연주합니다.';}catch(_){$('audio-status').textContent=audioFailure}});
+// Synthesis shared by chord and reference playback. Everything goes through one limiter bus so louder voices cannot clip.
+const chordLevel=.45,chordDecay=2.8,referenceLevel=.38,referenceDecay=1.7;
+function audioBus(ctx){
+if(!ctx.chordBus){const comp=ctx.createDynamicsCompressor(),master=ctx.createGain();comp.threshold.value=-12;comp.knee.value=10;comp.ratio.value=12;comp.attack.value=.003;comp.release.value=.2;master.connect(comp);comp.connect(ctx.destination);ctx.chordBus=master;}
+return ctx.chordBus;
+}
+// A voice fades out over a few milliseconds when stopped to avoid clicks.
+function voiceStop(ctx,gain,oscs){return {stop(){const t=ctx.currentTime;try{gain.gain.cancelScheduledValues(t);gain.gain.setTargetAtTime(0,t,.012);}catch(_){}for(const o of oscs){try{o.stop(t+.09);}catch(_){}}}};}
+function scheduleTone(ctx,out,frequency,at,peak,decay,weights,attack){
+const gain=ctx.createGain(),oscs=[];
+gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(peak,at+attack);gain.gain.exponentialRampToValueAtTime(.0001,at+decay);gain.connect(out);
+weights.forEach((weight,k)=>{const osc=ctx.createOscillator(),level=ctx.createGain();osc.type='sine';osc.frequency.setValueAtTime(frequency*(k+1),at);level.gain.value=weight;osc.connect(level);level.connect(gain);osc.start(at);osc.stop(at+decay+.1);oscs.push(osc);osc.addEventListener('ended',()=>{osc.disconnect();level.disconnect();if(k===weights.length-1)gain.disconnect();});});
+return {voice:voiceStop(ctx,gain,oscs),oscs};
+}
+function scheduleChord(ctx,fretsList,at){
+const strings=fretsList.map((f,i)=>({f,i})).filter(s=>s.f>=0),peak=chordLevel/Math.sqrt(strings.length||1);
+return strings.map((s,n)=>scheduleTone(ctx,audioBus(ctx),440*Math.pow(2,(tuning[s.i]+s.f-69)/12),at+n*.045,peak,chordDecay,[1,1/4,1/9,1/16],.008));
+}
+function scheduleReference(ctx,frequency,at){return scheduleTone(ctx,audioBus(ctx),frequency,at,referenceLevel,referenceDecay,[1,.5,.35,.2],.025);}
+$('play').addEventListener('click',async()=>{const v=voicings[position];if(!v)return;try{await prepareAudio();if($('chords-panel').hidden)return;for(const node of playing){try{node.stop();}catch(_){}}playing=[];
+playing=scheduleChord(audioContext,v.frets,audioContext.currentTime+.03).map(t=>t.voice);$('audio-status').textContent='현재 보이싱을 연주합니다.';}catch(_){$('audio-status').textContent=audioFailure}});
 // YIN: cumulative mean normalized difference, then a parabolic period estimate.
 // Kept independent of the DOM so synthetic signals can exercise the real detector in Node.
 function detectPitch(samples,sampleRate){
@@ -870,14 +899,11 @@ play.addEventListener('click',async()=>{
 stopPlayback();const request=playbackRequest;
 try{
 await prepareAudio();if(request!==playbackRequest||$('tuner-panel').hidden)return;
-const at=audioContext.currentTime+.02,frequency=stringFrequency(index,concertA),gain=audioContext.createGain(),oscs=[];
-gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.2,at+.025);gain.gain.exponentialRampToValueAtTime(.0001,at+1.5);gain.connect(audioContext.destination);
-// Phone speakers barely reproduce 82-147 Hz, so soft overtones keep the same pitch audible.
-[1,.5,.35,.2].forEach((weight,k)=>{const osc=audioContext.createOscillator(),level=audioContext.createGain();osc.type='sine';osc.frequency.setValueAtTime(frequency*(k+1),at);level.gain.value=weight;osc.connect(level);level.connect(gain);osc.start(at);osc.stop(at+1.6);oscs.push(osc);osc.onended=()=>{osc.disconnect();level.disconnect();};});
-const osc=oscs[0];playing=oscs;referenceUntil=performance.now()+1950;resetTuner();
+const frequency=stringFrequency(index,concertA),tone=scheduleReference(audioContext,frequency,audioContext.currentTime+.02);
+const osc=tone.oscs[0];playing=[tone.voice];referenceUntil=performance.now()+2150;resetTuner();
 $('tuner-advice').textContent='기준음 재생 중 · 잠시 듣고 비교하세요.';
 $('reference-status').textContent=`${6-index}번 줄 ${name} · ${frequency.toFixed(2)} Hz 재생 중`;
-osc.addEventListener('ended',()=>{gain.disconnect();if(request===playbackRequest){playing=[];$('reference-status').textContent='재생 완료';resetTuner();}});
+osc.addEventListener('ended',()=>{if(request===playbackRequest){playing=[];$('reference-status').textContent='재생 완료';resetTuner();}});
 }catch(_){if(request===playbackRequest)$('reference-status').textContent=audioFailure;}
 });
 });
