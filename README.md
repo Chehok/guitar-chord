@@ -19,7 +19,10 @@ node tests/install.cjs
 node tests/navigation.cjs
 node tests/score.cjs
 node tests/ocr-eval.cjs
+node tests/ocr-dataset.cjs
 ```
+
+2026-11-06 reviewed 53장 기준 실측과 새 평가 도구는 [검증 기록](docs/ocr-reviewed-20261106.md)에 있습니다. 개발 정확 일치는 1,358→1,387/1,914개, 평가 정확 일치는 194→194/318개였습니다. 개발 precision은 낮아졌고 평가 개선은 확인되지 않아 현재 결과로는 머지를 권하지 않습니다. 모델 재학습이 아닌 영역 검출·후처리 변경입니다. 원본·전사·원시 보고서는 저장소 밖에 보관합니다.
 
 악보 OCR 실측(브라우저 없이 Tesseract.js 5.1.1 사용):
 

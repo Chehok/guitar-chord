@@ -830,10 +830,10 @@ const alternative=/^(.+)\(([A-G][^()]*)\)$/.exec(text);
 if(alternative){const primary=parseScoreChord(alternative[1]),other=parseScoreChord(alternative[2]);if(primary&&other)return {...primary,text,alternative:other.text};}
 const match=/^([A-G])([#b]?)([^/]*)(?:\/([A-G])([#b]?))?$/.exec(text);
 if(!match)return null;
-const suffix=match[3];
-if(!/^(?:m(?:maj|M)?|maj|M|dim|aug|\+)?(?:2|5|6|7|9|11|13)?(?:sus[24]?|add(?:2|4|6|9|11|13)|[#b](?:5|9|11|13)|\((?:(?:sus|add)?(?:2|4|5|6|7|9|11|13)|[#b](?:5|9|11|13))(?:,(?:[#b]?(?:5|9|11|13)))*\))*$/.test(suffix))return null;
+const suffix=match[3],grammarSuffix=suffix.replace(/sus|add|maj|dim|aug/gi,word=>word.toLowerCase());
+if(!/^(?:m(?:maj|M)?|maj|M|dim|aug|\+)?(?:2|5|6|7|9|11|13)?(?:sus[24]?|add(?:2|4|6|9|11|13)|[#b](?:5|9|11|13)|\((?:(?:sus|add)?(?:2|4|5|6|7|9|11|13)|[#b](?:5|9|11|13))(?:,(?:[#b]?(?:5|9|11|13)))*\))*$/.test(grammarSuffix))return null;
 const pc=(letter,acc)=>scoreMod(({C:0,D:2,E:4,F:5,G:7,A:9,B:11})[letter]+(acc==='#'?1:acc==='b'?-1:0));
-return {text,root:pc(match[1],match[2]),suffix,bass:match[4]?pc(match[4],match[5]):null,minor:/^m(?!aj)/.test(suffix)};
+return {text,root:pc(match[1],match[2]),suffix,bass:match[4]?pc(match[4],match[5]):null,minor:suffix.startsWith('m')&&!/^maj/i.test(suffix)};
 }
 function scorePreferFlats(key){
 if(typeof key==='string'){const chord=parseScoreChord(key);if(!chord)return false;return key.includes('b')||(!key.includes('#')&&[...(chord.minor?[0,2,3,5,7,10]:[1,3,5,8,10])].includes(chord.root));}
@@ -888,6 +888,8 @@ function normalizeScoreOCR(value){
 if(typeof value!=='string')return null;
 let text=value.normalize('NFKC').trim().replace(/♭/g,'b').replace(/♯/g,'#').replace(/[⁄∕\\]/g,'/').replace(/\s+/g,'').replace(/^[|:;,]+|[|:;,.]+$/g,'');
 if(parseScoreChord(text))return text;
+// A small printed m can be read as a; retain a digit only when OCR read it.
+text=text.replace(/^([A-G][#b]?)a(?=[0-9])/,'$1m');
 // A lone 0/O is too ambiguous. Only repair a root next to a chord extension.
 text=text.replace(/(^|\/)[0O](?=(?:m|M|maj|dim|sus|[79]))/g,'$1D').replace(/^[a-g](?=[#bmM0-9/])/,(letter)=>letter.toUpperCase());
 text=text.replace(/[3g]us(?=[24]?$)/,'sus').replace(/sus[dD](?=\)|$)/,'sus4').replace(/^[12]\.?\s*(?=[A-G])/,'').replace(/^\(+(?=[A-G].*\()/,'');
@@ -1035,26 +1037,36 @@ if(count>height*.8){if(start<0)start=x;}else if(start>=0){if(x-start>width*.005)
 if(gutter)pages.push([0,gutter.x0],[gutter.x1,width]);else pages.push([0,width]);
 const staffs=[];
 for(const [left,right] of pages){
-const lines=[];
+// Dense note beams and faint staff lines need different projection thresholds.
+// Reuse the same pixels; retain a five-line band found by any threshold.
+const thresholds=[630,690],projections=thresholds.map(()=>[]);
 for(let y=0;y<height;y++){
-let count=0,x0=right,x1=left;
+const counts=[0,0],starts=[right,right],ends=[left,left];
 for(let x=left;x<right;x++){
 const i=(y*width+x)*4,r=data[i],g=data[i+1],b=data[i+2];
-if((r+g+b)<630&&Math.max(r,g,b)-Math.min(r,g,b)<70){count++;x0=Math.min(x0,x);x1=x+1;}
+if(Math.max(r,g,b)-Math.min(r,g,b)>=70)continue;
+for(let k=0;k<2;k++)if(r+g+b<thresholds[k]){counts[k]++;starts[k]=Math.min(starts[k],x);ends[k]=x+1;}
 }
-if(count<(right-left)*.55)continue;
+for(let k=0;k<2;k++)projections[k].push({count:counts[k],x0:starts[k],x1:ends[k]});
+}
+for(const projection of projections)for(const coverage of [.55,.75,.85]){
+const lines=[];
+for(let y=0;y<height;y++){
+const {count,x0,x1}=projection[y];
+if(count<(right-left)*coverage)continue;
 const previous=lines.at(-1);
-if(previous&&y-previous.last<=2){previous.sum+=y;previous.count++;previous.last=y;previous.x0=Math.min(previous.x0,x0);previous.x1=Math.max(previous.x1,x1);}
+if(previous&&y-previous.last<=1){previous.sum+=y;previous.count++;previous.last=y;previous.x0=Math.min(previous.x0,x0);previous.x1=Math.max(previous.x1,x1);}
 else lines.push({sum:y,count:1,last:y,x0,x1});
 }
 const ys=lines.filter(l=>l.count<Math.max(4,height*.008)).map(l=>({...l,y:l.sum/l.count}));
 for(let i=0;i+4<ys.length;i++){
 const group=ys.slice(i,i+5),gaps=group.slice(1).map((l,j)=>l.y-group[j].y),gap=(group[4].y-group[0].y)/4;
 if(gap<2||gap>height*.025||gaps.some(g=>Math.abs(g-gap)>Math.max(1.5,gap*.3)))continue;
-staffs.push({page:left,x0:Math.min(...group.map(c=>c.x0)),x1:Math.max(...group.map(c=>c.x1)),top:group[0].y,gap});i+=4;
+if(!staffs.some(s=>s.page===left&&Math.abs(s.top-group[0].y)<Math.max(s.gap,gap)*3))staffs.push({page:left,x0:Math.min(...group.map(c=>c.x0)),x1:Math.max(...group.map(c=>c.x1)),top:group[0].y,gap});i+=4;
 }
 }
-return staffs;
+}
+return staffs.sort((a,b)=>a.page-b.page||a.top-b.top);
 }
 function scoreNeutralInk(r,g,b,strict=false){return r>(strict?110:140)&&r-g>(strict?10:25)&&r-b>(strict?10:25)&&r>g*(strict?1.06:1.15)?255:Math.round(.299*r+.587*g+.114*b);}
 // Connected ink above each staff excludes lyrics, note stems and clipped fragments.

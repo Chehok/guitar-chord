@@ -6,7 +6,7 @@
 // Python 3 + Pillow provide image I/O only. All OCR/preprocessing uses the app's JS.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm');
 const {execFile}=require('node:child_process');
-const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'index.html'),'utf8'),context=vm.createContext({});
+const root=path.join(__dirname,'..'),html=fs.readFileSync(process.env.OCR_APP_HTML||path.join(root,'index.html'),'utf8'),context=vm.createContext({});
 vm.runInContext(html.slice(html.indexOf('// Score music functions:'),html.indexOf('// End score music functions.')),context);
 function python(code,args=[],input){return new Promise((resolve,reject)=>{
 const child=execFile('python3',['-c',code,...args],{encoding:'buffer',maxBuffer:240*1024*1024},(error,stdout)=>error?reject(error):resolve(stdout));
@@ -87,5 +87,5 @@ else console.log(r.codes.map(c=>c.text).join(' '));
 if(all){const summary=table(reports);console.log('\n'+summary);fs.writeFileSync(path.join(output,'summary.md'),summary+'\n');fs.writeFileSync(path.join(output,'summary.json'),JSON.stringify(reports.map(({attempts,codes,...r})=>r),null,2)+'\n');}
 }finally{if(worker)await worker.terminate();fs.rmSync(cache,{recursive:true,force:true});}
 }
-module.exports={evaluate,table};
+module.exports={evaluate,table,recognize,context};
 if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});
