@@ -12,7 +12,7 @@ assert.match(html,/<form method="dialog"><button autofocus>닫기<\/button>/);
 function setup(userAgent='',installed=false,legacyStandalone=false,maxTouchPoints=0){
   const handlers={},clicks={};
   const button={hidden:true,addEventListener:(name,fn)=>{clicks[name]=fn;}};
-  const guide={open:false,showModal(){this.open=true;},close(){this.open=false;}};
+  const guide={open:false,showModal(){this.open=true;},close(){this.open=false;},addEventListener:(name,fn)=>{guide['on'+name]=fn;},querySelector:()=>null};
   const media={matches:installed,addEventListener:(name,fn)=>{handlers.media=fn;}};
   vm.runInNewContext(script,{
     $:id=>id==='install-button'?button:guide,
@@ -41,7 +41,7 @@ function setup(userAgent='',installed=false,legacyStandalone=false,maxTouchPoint
   }
   const rejected=setup();rejected.offer(async()=>{throw Error('unavailable');});
   await rejected.click();assert(rejected.button.hidden);
-  for(const [ua,touches] of [['iPhone Version/18 Safari',0],['iPad Safari',0],['iPod Safari',0],['Macintosh Version/18 Safari',5]]){
+  for(const [ua,touches] of [['iPhone CriOS/130 Mobile Safari',0],['iPad CriOS/130 Mobile Safari',0],['iPhone Version/18 Safari',0],['iPad Safari',0],['iPod Safari',0],['Macintosh Version/18 Safari',5]]){
     const app=setup(ua,false,false,touches);
     assert(!app.button.hidden);await app.click();assert(app.guide.open);
     app.guide.close();assert(!app.guide.open);
@@ -51,10 +51,15 @@ function setup(userAgent='',installed=false,legacyStandalone=false,maxTouchPoint
     app.handlers.appinstalled();assert(app.button.hidden);
     assert(setup(ua,false,true,touches).button.hidden);
   }
-  for(const browser of ['CriOS','FxiOS','EdgiOS','OPiOS'])assert(setup(`iPhone ${browser} Safari`).button.hidden);
+  for(const browser of ['FxiOS','EdgiOS','OPiOS'])assert(setup(`iPhone ${browser} Safari`).button.hidden);
   assert(setup('Macintosh Safari',false,false,0).button.hidden);
   for(const ua of ['Android Chrome','Desktop Chrome','iPhone Safari']){
     const app=setup(ua,true);app.offer();assert(app.button.hidden);await app.click();assert(!app.guide.open);
   }
+  {const app=setup('iPhone CriOS/130');assert(!app.button.hidden);await app.click();assert(app.guide.open);
+    app.guide.onclick({target:{}});assert(app.guide.open,'Dialog content clicks keep it open');
+    app.guide.onclick({target:app.guide});assert(!app.guide.open,'Backdrop click closes');}
+  assert(setup('Android Chrome CriOS-less').button.hidden,'Android without prompt stays hidden');
+  assert.match(html,/id="install-step-1"/);assert.match(html,/실제 화면과 다를 수 있어요/);
   console.log('Install prompt, iOS guide, browser exclusions and standalone lifecycle passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
