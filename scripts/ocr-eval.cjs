@@ -45,7 +45,7 @@ const total=expected.count??expected.chords.length,correct=matched.length;
 return {expected:total,correct,precision:result.length?correct/result.length:0,recall:correct/total,missing,wrong,extra:[...remaining],matched,lines};
 }
 async function recognize(worker,filename,expected,output){
-const started=Date.now(),attempts=[];
+const started=Date.now(),attempts=[],stages={};
 const raw=await python('from PIL import Image\nimport sys,struct\nim=Image.open(sys.argv[1]).convert("RGBA")\nsys.stdout.buffer.write(struct.pack(">II",*im.size)+im.tobytes())',[filename]);
 const original={width:raw.readUInt32BE(0),height:raw.readUInt32BE(4),data:raw.subarray(8)};
 if(expected&&(expected.width!==original.width||expected.height!==original.height))throw Error('Fixture dimensions differ from original.');
@@ -61,10 +61,10 @@ const {data}=await worker.recognizeRegion(image);
 attempts.push({pass:++pass,variant,engine:'paddle',psm:null,bbox:regionBox,text:data.text,confidence:data.confidence,secondary:data.secondary});
 return {data};
 };
-const codes=await context.runScoreOCRPasses(adapter,source,encode,(_index,_total,name,bbox)=>{variant=name;regionBox=bbox||null;});
+const codes=await context.runScoreOCRPasses(adapter,source,encode,(_index,_total,name,bbox)=>{variant=name;regionBox=bbox||null;},()=>true,process.env.OCR_DIAGNOSTICS?(name,value)=>{stages[name]=JSON.parse(JSON.stringify(value));}:null);
 const result=codes.map(c=>({...c,bbox:{x0:c.bbox.x0*original.width/source.width,y0:c.bbox.y0*original.height/source.height,x1:c.bbox.x1*original.width/source.width,y1:c.bbox.y1*original.height/source.height}}));
 const evaluation=expected?evaluate(result,expected):null;
-const report={image:filename,width:original.width,height:original.height,source:{width:source.width,height:source.height},count:result.length,seconds:(Date.now()-started)/1000,codes:result,evaluation,attempts};
+const report={image:filename,width:original.width,height:original.height,source:{width:source.width,height:source.height},count:result.length,seconds:(Date.now()-started)/1000,codes:result,evaluation,attempts,...(process.env.OCR_DIAGNOSTICS?{stages}:{})};
 if(output){fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output+'.json',JSON.stringify(report,null,2)+'\n');
 // Row fixtures have no invented per-chord boxes; mark actual OCR only.
 await python('from PIL import Image,ImageDraw\nimport sys,json\nim=Image.open(sys.argv[1]).convert("RGB");d=ImageDraw.Draw(im)\nfor c in json.load(sys.stdin):\n b=c["bbox"];d.rectangle((b["x0"]-2,b["y0"]-2,b["x1"]+2,b["y1"]+2),outline="green",width=2);d.text((b["x0"],b["y0"]-15),c["text"],fill="green")\nim.save(sys.argv[2])',[filename,output+'.png'],JSON.stringify(result));}
