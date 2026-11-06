@@ -81,15 +81,16 @@ button.primary:active:not(:disabled) { background: var(--green-hover); border-co
 .quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 24px; }
 .quick button { min-width: 44px; padding: 8px 13px; font-size: 14px; border-color: var(--line); }
 .quick button[aria-pressed=true] { background: var(--soft); border-color: var(--green); color: var(--green); }
-.chord-filter { margin: 16px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
-.filter-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.filter-head h2 { margin: 0; }
-.filter-group { margin-top: 12px; }
-.filter-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 650; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips button { min-width: 44px; min-height: 44px; padding: 6px 12px; font-size: 15px; border-color: var(--line); }
-.chips button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: var(--on-green); font-weight: 700; }
-.filter-status { margin: 12px 0 4px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.chord-filter { margin: 12px 0 20px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.filter-selects { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.filter-select { display: block; min-width: 0; font-size: 12px; font-weight: 650; color: var(--muted); }
+.filter-select span { display: block; margin-bottom: 3px; }
+.filter-select select { width: 100%; min-width: 0; min-height: 44px; padding: 6px 4px 6px 8px; font: inherit; font-size: 16px; font-weight: 650; color: var(--ink); background: var(--panel); border: 1px solid var(--control); border-radius: 10px; text-overflow: ellipsis; }
+.filter-select select:focus-visible { outline: 3px solid var(--green); outline-offset: 1px; }
+.filter-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.filter-status { margin: 0; flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.filter-status strong { color: var(--ink); font-size: 15px; }
+.filter-reset { flex: none; min-height: 44px; padding: 4px 12px; font-size: 13px; }
 .chord-filter .quick.results { margin: 8px 0 0; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
 .chord-filter .quick.results button { min-height: 44px; }
 .layout, .tuner-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -281,11 +282,12 @@ footer { padding: 24px 0 8px; color: var(--muted); font-size: 12px; line-height:
 <p class="hint">장조는 C 또는 Cmajor · 단조는 Cm · 샵 # / 플랫 b · 확장 코드 F#m11, C7(b9,b13) · 슬래시 코드 C/G · 6/9 등</p>
 <p id="error" class="error" role="alert"></p>
 <section id="chord-filter" class="chord-filter" aria-label="코드 추천 필터">
-<div class="filter-head"><h2 class="overline">코드 추천 필터</h2><button id="filter-reset" type="button">초기화 (C · M · 일반)</button></div>
-<div class="filter-group" role="group" aria-labelledby="root-filter-label"><span id="root-filter-label" class="filter-label">1. 기본음</span><div id="root-filter" class="chips"></div></div>
-<div class="filter-group" role="group" aria-labelledby="kind-filter-label"><span id="kind-filter-label" class="filter-label">2. 코드 종류</span><div id="kind-filter" class="chips"></div></div>
-<div class="filter-group" role="group" aria-labelledby="bass-filter-label"><span id="bass-filter-label" class="filter-label">3. 베이스음 (슬래시 뒤 음 · 예: C/G의 G)</span><div id="bass-filter" class="chips"></div></div>
-<p id="filter-status" class="filter-status" role="status" aria-live="polite"></p>
+<div class="filter-selects">
+<label class="filter-select"><span>기본음</span><select id="root-filter"></select></label>
+<label class="filter-select"><span>코드 종류</span><select id="kind-filter"></select></label>
+<label class="filter-select"><span>베이스음</span><select id="bass-filter"></select></label>
+</div>
+<div class="filter-summary"><p id="filter-status" class="filter-status" role="status" aria-live="polite"></p><button id="filter-reset" class="filter-reset" type="button" aria-label="필터 초기화 (C · M · 일반)">초기화</button></div>
 <nav id="quick" class="quick results" aria-label="필터에 맞는 코드"></nav>
 <p id="filter-empty" class="hint" hidden>조건에 맞는 코드가 없습니다. (기본음과 같은 음은 베이스음으로 고를 수 없어요.) 필터를 바꾸거나 초기화해 주세요. 위 코드 카드는 이전에 선택한 코드입니다.</p>
 </section>
@@ -720,15 +722,23 @@ function chordFilterResults(root,kind,bass='none'){
 let filterRoot='C',filterKind='M',filterBass='none';
 const filterListLimit=96;
 function filterButton(text,pressed,onClick,label){const b=document.createElement('button');b.type='button';b.textContent=text;b.setAttribute('aria-pressed',String(pressed));if(label)b.setAttribute('aria-label',label);b.addEventListener('click',onClick);return b;}
+function fillSelect(id,options,value,onChange){
+  const select=$(id);
+  if(!select.options.length){for(const [v,text] of options){const o=document.createElement('option');o.value=v;o.textContent=text;if(v==='none')o.title='슬래시 없는 일반 코드';if(v==='all'&&id==='bass-filter')o.title='일반 코드와 모든 슬래시 베이스';select.append(o);}select.addEventListener('change',()=>onChange(select.value));}
+  select.value=value;
+}
 function renderFilters(){
-  const word=(value,all)=>value==='all'?'전체':value==='none'?'일반(슬래시 없음)':value;
-  $('root-filter').replaceChildren(filterButton('전체',filterRoot==='all',()=>setFilters('all',filterKind,filterBass),'모든 기본음'),...filterRoots.map(r=>filterButton(r,filterRoot===r,()=>setFilters(r,filterKind,filterBass))));
-  $('kind-filter').replaceChildren(filterButton('전체',filterKind==='all',()=>setFilters(filterRoot,'all',filterBass),'모든 코드 종류'),...filterKinds.map(k=>filterButton(k.label,filterKind===k.label,()=>setFilters(filterRoot,k.label,filterBass))));
-  $('bass-filter').replaceChildren(filterButton('일반',filterBass==='none',()=>setFilters(filterRoot,filterKind,'none'),'일반 코드, 슬래시 베이스 없음'),filterButton('전체',filterBass==='all',()=>setFilters(filterRoot,filterKind,'all'),'일반 코드와 모든 베이스음'),...filterRoots.map(n=>filterButton(n,filterBass===n,()=>setFilters(filterRoot,filterKind,n),`베이스음 ${n}`)));
+  const word=value=>value==='all'?'전체':value==='none'?'일반(슬래시 없음)':value;
+  fillSelect('root-filter',[['all','전체'],...filterRoots.map(r=>[r,r])],filterRoot,v=>setFilters(v,filterKind,filterBass));
+  fillSelect('kind-filter',[['all','전체'],...filterKinds.map(k=>[k.label,k.label])],filterKind,v=>setFilters(filterRoot,v,filterBass));
+  fillSelect('bass-filter',[['none','일반'],['all','전체'],...filterRoots.map(n=>[n,n])],filterBass,v=>setFilters(filterRoot,filterKind,v));
   const names=chordFilterResults(filterRoot,filterKind,filterBass),shown=names.slice(0,filterListLimit);
   $('quick').replaceChildren(...shown.map(name=>filterButton(name,current&&current.label===name,()=>{$('chord-input').value=name;find(name);})));
   $('filter-empty').hidden=names.length>0;$('quick').hidden=!names.length;
-  $('filter-status').textContent=`기본음 ${word(filterRoot)} + 종류 ${word(filterKind)} + 베이스 ${word(filterBass)} → ${names.length}개`+(names.length===1?` · ${names[0]}`:'')+(names.length>shown.length?` (앞의 ${shown.length}개만 표시 · 필터를 좁혀 보세요)`:'');
+  const status=$('filter-status');status.textContent='';
+  status.append(`기본음 ${word(filterRoot)} · 종류 ${word(filterKind)} · 베이스 ${word(filterBass)} → ${names.length}개`);
+  if(names.length===1){const strong=document.createElement('strong');strong.textContent=names[0];status.append(' · ',strong);}
+  if(names.length>shown.length)status.append(` (앞의 ${shown.length}개만 표시 · 필터를 좁혀 보세요)`);
   return names;
 }
 function setFilters(root,kind,bass=filterBass){

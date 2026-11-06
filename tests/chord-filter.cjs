@@ -46,7 +46,9 @@ assert(!res('C','all','G').some(n=>n.startsWith('C#')),'C does not match C#');
 assert(res('all','m7','G#').every(n=>n.endsWith('m7/G#')),'M7/m7 never cross; bass fixed');
 assert.equal(res('all','all','all').length,12*17+12*17*11,'full set');
 for(const n of ['C/G','C#m7/G#','Cm7/A#','Csus2/D','Cdim/F#','C#m11/G#','Am/C']){const c=parse(n);const v=makeVoicings(c);assert(v.length>0&&v.every(x=>x.bass===c.bassPc),n);}
-assert.match(html,/id="bass-filter"/);assert.match(html,/초기화 \(C · M · 일반\)/);
+for(const id of ['root-filter','kind-filter','bass-filter'])assert.match(html,new RegExp(`<label class="filter-select"><span>[^<]+</span><select id="${id}"></select></label>`),`${id} is a labelled native select`);
+assert.match(html,/id="filter-reset"[^>]*aria-label="필터 초기화 \(C · M · 일반\)"/);
+assert(!/class="chips"/.test(html),'no always-open option grids');
 assert.match(html,/id="filter-empty"[^>]*hidden/);
 assert.match(html,/id="filter-reset"/);
 console.log('Chord filter combinations, ordering, exclusivity and voicing support passed.');
