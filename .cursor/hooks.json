@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node \"vendor/ponytail/hooks/ponytail-mode-tracker.js\"",
+        "timeout": 15
+      }
+    ]
+  }
+}
