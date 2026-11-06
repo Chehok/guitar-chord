@@ -18,6 +18,8 @@ node tests/pwa.cjs
 node tests/install.cjs
 node tests/navigation.cjs
 node tests/score.cjs
+node tests/chord-filter.cjs
+node tests/audio.cjs
 node tests/ocr-eval.cjs
 node tests/ocr-dataset.cjs
 node tests/score-recognizer.cjs

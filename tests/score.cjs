@@ -145,6 +145,28 @@ assert(paint.some(call=>call[0]==='mask'&&call[2]===198),'Replacement covers ori
 paint.length=0;context.drawScore(new Element(),true);assert.deepEqual(paint.map(p=>p[0]),['image']);
 paint.length=0;vm.runInContext("scoreState.overlay='above'",context);context.drawScore(new Element(),false);
 assert(paint.find(p=>p[0]==='text')[3]<200,'Above mode draws above original chord');
+// Capo view: "−" below capo 0 lowers the key (never a negative fret); + returns the same way.
+{
+  const click=id=>$(id).handlers.click(),state=()=>JSON.parse(vm.runInContext('JSON.stringify([scoreState.capo,scoreState.keyDown])',context));
+  const shown=chord=>vm.runInContext(`transformedScoreChord(${JSON.stringify(chord)},{pc:7,minor:false,name:'G'})`,context);
+  vm.runInContext("scoreState.capo=0;scoreState.keyDown=0;scoreState.mode='capo';",context);
+  context.renderScore();assert(!$('score-capo-minus').disabled,'− is available at capo 0');
+  assert.equal(shown('G'),'G');
+  click('score-capo-minus');assert.deepEqual(state(),[0,1]);
+  assert.equal(shown('G'),'F#');assert.equal(shown('C/E'),'B/D#');assert.equal(shown('Gm/Bb'),'F#m/A');assert.equal(shown('Em7'),'D#m7');
+  assert.equal($('score-capo-value').textContent,'카포 없음 · 키 −1반음');assert.match($('score-result-key').textContent,/카포는 0보다 낮출 수 없어/);
+  assert(!/카포 −/.test($('score-capo-value').textContent));
+  click('score-capo-minus');assert.deepEqual(state(),[0,2]);assert.equal(shown('G'),'F');
+  for(let i=0;i<20;i++)click('score-capo-minus');assert.deepEqual(state(),[0,11]);assert($('score-capo-minus').disabled);
+  for(let i=0;i<11;i++)click('score-capo-plus');assert.deepEqual(state(),[0,0]);assert.equal(shown('G'),'G');
+  click('score-capo-plus');assert.deepEqual(state(),[1,0]);assert.equal(shown('G'),'F#');
+  click('score-capo-minus');assert.deepEqual(state(),[0,0]);click('score-capo-minus');assert.deepEqual(state(),[0,1]);
+  $('score-frets').children[3].handlers.click();assert.deepEqual(state(),[3,0],'fret button resets the key shift');
+  assert.equal($('score-capo-value').textContent,'카포 3');
+  click('score-capo-minus');click('score-capo-minus');click('score-capo-minus');click('score-capo-minus');assert.deepEqual(state(),[0,1]);
+  vm.runInContext("scoreState.mode='transpose';scoreState.semitones=2;",context);assert.equal(shown('G'),'A','transpose mode ignores capo-view key shift');
+  vm.runInContext("scoreState.mode='capo';scoreState.capo=1;scoreState.keyDown=0;",context);
+}
 async function checkOCR(){
 let regionPSM,regionCalls=0;
 const regionResult=await context.runScoreOCRPasses({setParameters:async p=>{regionPSM=p.tessedit_pageseg_mode;},recognize:async()=>{

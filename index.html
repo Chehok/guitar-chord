@@ -81,6 +81,17 @@ button.primary:active:not(:disabled) { background: var(--green-hover); border-co
 .quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 24px; }
 .quick button { min-width: 44px; padding: 8px 13px; font-size: 14px; border-color: var(--line); }
 .quick button[aria-pressed=true] { background: var(--soft); border-color: var(--green); color: var(--green); }
+.chord-filter { margin: 16px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.filter-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.filter-head h2 { margin: 0; }
+.filter-group { margin-top: 12px; }
+.filter-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 650; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { min-width: 44px; min-height: 44px; padding: 6px 12px; font-size: 15px; border-color: var(--line); }
+.chips button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: var(--on-green); font-weight: 700; }
+.filter-status { margin: 12px 0 4px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.chord-filter .quick.results { margin: 8px 0 0; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
+.chord-filter .quick.results button { min-height: 44px; }
 .layout, .tuner-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .panel { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .diagram-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
@@ -125,6 +136,16 @@ footer { padding: 24px 0 8px; color: var(--muted); font-size: 12px; line-height:
 .install-guide { width: calc(100% - 32px); max-width: 352px; max-height: calc(100% - 32px); padding: 24px; border: 1px solid var(--line); border-radius: 24px; background: var(--panel); color: var(--ink); text-align: center; overflow-wrap: anywhere; }
 .install-guide::backdrop { background: #0006; }
 .install-guide h2 { margin: 0 0 12px; font-size: 18px; }
+.install-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; text-align: left; }
+.install-steps li { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 10px; align-items: start; }
+.install-steps .step-no { grid-row: 1 / span 2; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--green); color: var(--on-green); font-size: 13px; font-weight: 700; }
+.install-steps p { margin: 4px 0 0; font-size: 14px; line-height: 1.6; }
+.step-art { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 12px; background: var(--soft); font-size: 13px; min-width: 0; }
+.step-art img { border-radius: 9px; flex: none; }
+.mock-bar { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 6px 10px; border-radius: 16px; background: var(--panel); }
+.mock-bar b { padding: 2px 8px; border-radius: 10px; background: var(--green); color: var(--on-green); white-space: nowrap; font-size: 12px; }
+.mock-row { flex: 1; padding: 6px 10px; border-radius: 10px; background: var(--panel); min-width: 0; }
+.install-note { margin: 14px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted); text-align: left; }
 .install-guide form { margin-top: 20px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 #audio-status { min-height: 18px; margin-top: 8px; font-size: 12px; color: var(--muted); }
@@ -259,7 +280,14 @@ footer { padding: 24px 0 8px; color: var(--muted); font-size: 12px; line-height:
 <form id="search" class="search"><label class="sr-only" for="chord-input">코드 이름</label><input id="chord-input" value="C" placeholder="코드 이름, 예: F#m, Bb, Cmaj7" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="48"><button class="primary" type="submit">코드 찾기</button></form>
 <p class="hint">장조는 C 또는 Cmajor · 단조는 Cm · 샵 # / 플랫 b · 확장 코드 F#m11, C7(b9,b13) · 슬래시 코드 C/G · 6/9 등</p>
 <p id="error" class="error" role="alert"></p>
-<nav id="quick" class="quick" aria-label="자주 찾는 코드"></nav>
+<section id="chord-filter" class="chord-filter" aria-label="코드 추천 필터">
+<div class="filter-head"><h2 class="overline">코드 추천 필터</h2><button id="filter-reset" type="button">초기화 (C · M)</button></div>
+<div class="filter-group" role="group" aria-labelledby="root-filter-label"><span id="root-filter-label" class="filter-label">1. 기본음</span><div id="root-filter" class="chips"></div></div>
+<div class="filter-group" role="group" aria-labelledby="kind-filter-label"><span id="kind-filter-label" class="filter-label">2. 코드 종류</span><div id="kind-filter" class="chips"></div></div>
+<p id="filter-status" class="filter-status" role="status" aria-live="polite"></p>
+<nav id="quick" class="quick results" aria-label="필터에 맞는 코드"></nav>
+<p id="filter-empty" class="hint" hidden>조건에 맞는 코드가 없습니다. 기본음이나 코드 종류를 바꾸거나 초기화해 주세요.</p>
+</section>
 <div class="layout">
 <section class="panel" aria-label="코드 운지법"><div class="diagram-head"><div><h2 id="chord-title" class="chord-title"></h2><p id="quality" class="quality"></p></div><button id="play" class="play" type="button">소리 듣기</button></div><div id="diagram"></div><div class="nav"><button id="prev" type="button" aria-label="이전 보이싱">← 이전</button><span id="counter" class="counter" aria-live="polite"></span><button id="next" type="button" aria-label="다음 보이싱">다음 →</button></div><p id="audio-status" role="status"></p></section>
 <section class="panel info-panel" aria-label="코드 구성음"><h2 class="overline">코드 구성음</h2><div id="tones" class="tones"></div><div class="details"><div><span>현재 운지 · 6번 → 1번 줄</span><strong id="frets"></strong></div><div><span>가장 낮은 음</span><strong id="bass"></strong></div><div><span>튜닝 · 6번 → 1번 줄</span><strong>E A D G B E</strong></div><div><span>보이싱 유형</span><strong id="shape"></strong></div></div><p class="explain">다이어그램은 왼쪽부터 6번 줄(낮은 E)입니다. O는 개방현, X는 치지 않는 줄, 점 안의 숫자는 손가락 번호입니다. 굵은 막대는 한 손가락으로 여러 줄을 누르는 바레입니다.<br>1 검지 · 2 중지 · 3 약지 · 4 소지<br>확장 코드에서는 5음, 근음, 안쪽 확장음을 생략할 수 있으며 현재 운지에 표시합니다.</p></section>
@@ -322,7 +350,7 @@ footer { padding: 24px 0 8px; color: var(--muted); font-size: 12px; line-height:
 <p class="hint">키는 코드 빈도와 첫·마지막 코드로 추정합니다. 다른 키라면 직접 선택하세요.</p>
 <label for="score-key-select">원래 키</label> <select id="score-key-select"><option value="auto">자동 감지</option></select>
 <fieldset><legend>변환 방식</legend><div class="score-row"><label><input type="radio" name="score-mode" value="capo" checked> 카포 · 원래 키 유지</label><label><input type="radio" name="score-mode" value="transpose"> 카포 없이 키 바꾸기 (반음 ±)</label></div></fieldset>
-<div id="score-capo-controls"><div class="score-row"><button id="score-capo-minus" type="button" aria-label="카포 한 프렛 내리기">−</button><output id="score-capo-value" aria-live="polite">카포 0</output><button id="score-capo-plus" type="button" aria-label="카포 한 프렛 올리기">+</button></div><div class="score-fret-scroll" tabindex="0" role="region" aria-label="카포 0부터 11프렛 선택, 좌우로 스크롤"><div id="score-frets" class="score-frets" role="group" aria-label="카포 위치"></div></div></div>
+<div id="score-capo-controls"><div class="score-row"><button id="score-capo-minus" type="button" aria-label="카포 한 프렛 내리기 (카포 없음에서는 키를 반음 내림)">−</button><output id="score-capo-value" aria-live="polite">카포 0</output><button id="score-capo-plus" type="button" aria-label="카포 한 프렛 올리기">+</button></div><div class="score-fret-scroll" tabindex="0" role="region" aria-label="카포 0부터 11프렛 선택, 좌우로 스크롤"><div id="score-frets" class="score-frets" role="group" aria-label="카포 위치"></div></div></div>
 <div id="score-transpose-controls" class="score-row" hidden><button id="score-semi-minus" type="button" aria-label="키 반음 내리기">−1</button><output id="score-semi-value" aria-live="polite">0 반음</output><button id="score-semi-plus" type="button" aria-label="키 반음 올리기">+1</button></div>
 <p id="score-result-key" class="hint" aria-live="polite"></p>
 <fieldset><legend>코드 표시</legend><div class="score-row"><label><input type="radio" name="score-overlay" value="replace" checked> 교체</label><label><input type="radio" name="score-overlay" value="above"> 위에</label><label><input id="score-original" type="checkbox"> 원본 보기</label></div></fieldset>
@@ -339,7 +367,13 @@ footer { padding: 24px 0 8px; color: var(--muted); font-size: 12px; line-height:
 </main>
 <dialog id="install-guide" class="install-guide" aria-labelledby="install-guide-title" aria-describedby="install-guide-description">
 <h2 id="install-guide-title">홈 화면에 추가</h2>
-<p id="install-guide-description">Safari에서 공유 → 홈 화면에 추가를 선택해 주세요.</p>
+<p id="install-guide-description">Chrome에서 공유 메뉴로 홈 화면에 추가하세요.</p>
+<ol class="install-steps">
+<li><span class="step-no" aria-hidden="true">1</span><div class="step-art" aria-hidden="true"><span class="mock-bar"><span>🔒 기타메이트</span><b id="install-share-mark">⬆️ 공유</b></span></div><p id="install-step-1">주소창 오른쪽의 공유 아이콘(⬆️)을 누르세요.</p></li>
+<li><span class="step-no" aria-hidden="true">2</span><div class="step-art" aria-hidden="true"><span class="mock-row">➕ 홈 화면에 추가</span></div><p>목록을 아래로 밀어 <strong>홈 화면에 추가</strong>를 고르세요.</p></li>
+<li><span class="step-no" aria-hidden="true">3</span><div class="step-art" aria-hidden="true"><img src="./icons/icon-192.png" width="40" height="40" alt=""><span class="mock-row">기타메이트 · <b>추가</b></span></div><p>이름을 확인하고 <strong>추가</strong>를 누르면 홈 화면에 아이콘이 생겨요 🏠</p></li>
+</ol>
+<p class="install-note">그림은 이해를 돕는 설명용이며 실제 화면과 다를 수 있어요. iOS 16.4 이상이 필요하고, 추가된 아이콘이 앱처럼 열릴지는 iOS 설정에 따라 달라요. 직접 따라 해야 추가됩니다.</p>
 <form method="dialog"><button autofocus>닫기</button></form>
 </dialog>
 <script>
@@ -629,7 +663,8 @@ return svg(s,'0 0 1040 237','neck',`${current.label} 코드 구성음의 전체 
 function render(){const v=voicings[position];$('chord-title').textContent=current.label;$('quality').textContent=current.name;$('diagram').innerHTML=diagram(v);$('counter').textContent=voicings.length?`보이싱 ${position+1}/${voicings.length}`:'보이싱 없음';$('prev').disabled=$('next').disabled=voicings.length<2;$('play').disabled=!v;
 $('tones').replaceChildren(...current.tones.map(t=>{const div=document.createElement('div');div.className='tone'+(t[0]===0?' root':'');const strong=document.createElement('strong'),small=document.createElement('small');strong.textContent=toneName(current,t);small.textContent=t[1];div.append(strong,small);return div;}));
 $('frets').textContent=v?v.frets.map(f=>f<0?'X':f).join(' · '):'—';$('bass').textContent=v?noteName(current,v.bass)+(v.bass===current.pc?' · 근음':' · 전위형'):'—';$('shape').textContent=v?v.name+(v.omitted.length?' · 생략: '+v.omitted.join(', '):''):'—';$('neck').innerHTML=neck(v);$('audio-status').textContent='';document.querySelectorAll('#quick button').forEach(b=>b.setAttribute('aria-pressed',String(b.textContent===current.label)));}
-function find(value){try{const parsed=parse(value);const shapes=makeVoicings(parsed);current=parsed;voicings=shapes;position=0;$('error').textContent='';$('chord-input').removeAttribute('aria-invalid');render();}catch(error){$('error').textContent=error.message;$('chord-input').setAttribute('aria-invalid','true');}}
+function syncFilters(chord){const kind=filterKinds.find(k=>k.quality===chord.quality);if(chord.bassNote||!kind||!filterRoots.includes(chord.root))return;if(filterRoot!=='all'||filterKind!=='all'){filterRoot=chord.root;filterKind=kind.label;}if(typeof renderFilters==='function'&&document.getElementById('root-filter'))renderFilters();}
+function find(value){try{const parsed=parse(value);const shapes=makeVoicings(parsed);current=parsed;voicings=shapes;position=0;syncFilters(parsed);$('error').textContent='';$('chord-input').removeAttribute('aria-invalid');render();}catch(error){$('error').textContent=error.message;$('chord-input').setAttribute('aria-invalid','true');}}
 let identifyFrets=Array(6).fill(-1),identifyStart=1;
 const displayChord=name=>name.replace(/#/g,'♯').replace(/b/g,'♭');
 function renderIdentify(){
@@ -665,11 +700,51 @@ $('identify-start').addEventListener('change',()=>{identifyStart=Math.max(1,Math
 $('identify-reset').addEventListener('click',()=>{identifyFrets=Array(6).fill(-1);identifyStart=1;$('identify-start').value=1;renderIdentify();});
 renderIdentify();
 $('search').addEventListener('submit',e=>{e.preventDefault();find($('chord-input').value);});
-for(const name of 'C D E F G A B Am Bm Dm Em C7 D7 E7 G7 A7 Dmaj7 Cmaj7 Am7 Em7 Dsus2 Dsus4 Asus4 Bdim Caug F#m Bb F#m11 G#m7b13 Am9 Bm11 C#m7 C/G E7#9 Cmaj9 G13'.split(' ')){const b=document.createElement('button');b.type='button';b.textContent=name;b.addEventListener('click',()=>{$('chord-input').value=name;find(name);});$('quick').append(b);}
+// Chord filter functions:
+const filterRoots=['C','D','E','F','G','A','B','C#','D#','F#','G#','A#'];
+const filterKinds=[['M','',''],['m','m','m'],['7','7','7'],['M7','maj7','maj7'],['m7','m7','m7'],['sus2','sus2','sus2'],['sus4','sus4','sus4'],['dim','dim','dim'],['aug','aug','aug'],['6','6','6'],['m6','m6','m6'],['add9','add9','add9'],['9','9','9'],['m9','m9','m9'],['m11','m11','m11'],['dim7','dim7','dim7'],['m7b5','m7b5','m7b5']].map(([label,suffix,quality])=>({label,suffix,quality}));
+function chordFilterResults(root,kind){
+  const roots=root==='all'?filterRoots:filterRoots.filter(r=>r===root),kinds=kind==='all'?filterKinds:filterKinds.filter(k=>k.label===kind);
+  const names=[];
+  for(const r of roots)for(const k of kinds)try{const c=parse(r+k.suffix);if(c.root===r&&c.quality===k.quality&&!c.bassNote)names.push(c.label);}catch(_){}
+  return names;
+}
+// End chord filter functions.
+let filterRoot='C',filterKind='M';
+function filterButton(text,pressed,onClick,label){const b=document.createElement('button');b.type='button';b.textContent=text;b.setAttribute('aria-pressed',String(pressed));if(label)b.setAttribute('aria-label',label);b.addEventListener('click',onClick);return b;}
+function renderFilters(){
+  $('root-filter').replaceChildren(filterButton('전체',filterRoot==='all',()=>setFilters('all',filterKind),'모든 기본음'),...filterRoots.map(r=>filterButton(r,filterRoot===r,()=>setFilters(r,filterKind))));
+  $('kind-filter').replaceChildren(filterButton('전체',filterKind==='all',()=>setFilters(filterRoot,'all'),'모든 코드 종류'),...filterKinds.map(k=>filterButton(k.label,filterKind===k.label,()=>setFilters(filterRoot,k.label))));
+  const names=chordFilterResults(filterRoot,filterKind);
+  $('quick').replaceChildren(...names.map(name=>filterButton(name,current&&current.label===name,()=>{$('chord-input').value=name;find(name);})));
+  $('filter-empty').hidden=names.length>0;$('quick').hidden=!names.length;
+  $('filter-status').textContent=`기본음 ${filterRoot==='all'?'전체':filterRoot} + 종류 ${filterKind==='all'?'전체':filterKind} → ${names.length}개`+(names.length===1?` · ${names[0]}`:'');
+  return names;
+}
+function setFilters(root,kind){
+  filterRoot=root;filterKind=kind;const names=renderFilters();
+  if(names.length&&!(current&&names.includes(current.label))){$('chord-input').value=names[0];find(names[0]);}
+}
+$('filter-reset').addEventListener('click',()=>{setFilters('C','M');if($('chord-input').value!=='C'||!current||current.label!=='C'){$('chord-input').value='C';find('C');}});
+renderFilters();
 $('prev').addEventListener('click',()=>{if(voicings.length){position=modIndex(position-1);render();}});$('next').addEventListener('click',()=>{if(voicings.length){position=modIndex(position+1);render();}});function modIndex(n){return(n+voicings.length)%voicings.length;}
 let audioContext=null,playing=[];
-$('play').addEventListener('click',async()=>{const v=voicings[position];if(!v)return;try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('unsupported');if(!audioContext)audioContext=new Audio();await audioContext.resume();if($('chords-panel').hidden)return;for(const node of playing){try{node.stop();}catch(_){}}playing=[];const now=audioContext.currentTime+.03;let strum=0;
-v.frets.forEach((f,i)=>{if(f<0)return;const at=now+strum++*.045,freq=440*Math.pow(2,(tuning[i]+f-69)/12);const gain=audioContext.createGain();gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.105,at+.008);gain.gain.exponentialRampToValueAtTime(.0001,at+2.4);gain.connect(audioContext.destination);for(let h=1;h<=4;h++){const osc=audioContext.createOscillator(),level=audioContext.createGain();osc.type='sine';osc.frequency.setValueAtTime(freq*h,at);level.gain.value=1/(h*h);osc.connect(level);level.connect(gain);osc.start(at);osc.stop(at+2.5);osc.onended=()=>{osc.disconnect();level.disconnect();if(h===4)gain.disconnect();};playing.push(osc);}});$('audio-status').textContent='현재 보이싱을 연주합니다.';}catch(_){$('audio-status').textContent='소리를 재생할 수 없습니다. 브라우저의 오디오 설정을 확인해 주세요.'}});
+// iOS Web Audio can stay suspended/interrupted after backgrounding and is routed as "ambient" by default; prepare it on every explicit tap and fail visibly instead of reporting playback.
+function setAudioSession(type){try{if(navigator.audioSession&&navigator.audioSession.type!==type)navigator.audioSession.type=type;}catch(_){}}
+async function resumeAudio(context){if(context.state==='running')return true;try{await Promise.race([context.resume(),new Promise(resolve=>setTimeout(resolve,1500))]);}catch(_){}return context.state==='running';}
+async function prepareAudio(){
+const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('unsupported');
+setAudioSession('playback');
+if(audioContext&&audioContext.state==='closed')audioContext=null;
+if(!audioContext)audioContext=new Audio();
+if(await resumeAudio(audioContext))return audioContext;
+const stale=audioContext;audioContext=new Audio();try{stale.close();}catch(_){}
+if(await resumeAudio(audioContext))return audioContext;
+throw Error('audio-not-running');
+}
+const audioFailure='소리를 재생할 수 없습니다. 같은 버튼을 한 번 더 눌러 다시 시도하고, 계속되면 페이지를 새로고침해 주세요.';
+$('play').addEventListener('click',async()=>{const v=voicings[position];if(!v)return;try{await prepareAudio();if($('chords-panel').hidden)return;for(const node of playing){try{node.stop();}catch(_){}}playing=[];const now=audioContext.currentTime+.03;let strum=0;
+v.frets.forEach((f,i)=>{if(f<0)return;const at=now+strum++*.045,freq=440*Math.pow(2,(tuning[i]+f-69)/12);const gain=audioContext.createGain();gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.105,at+.008);gain.gain.exponentialRampToValueAtTime(.0001,at+2.4);gain.connect(audioContext.destination);for(let h=1;h<=4;h++){const osc=audioContext.createOscillator(),level=audioContext.createGain();osc.type='sine';osc.frequency.setValueAtTime(freq*h,at);level.gain.value=1/(h*h);osc.connect(level);level.connect(gain);osc.start(at);osc.stop(at+2.5);osc.onended=()=>{osc.disconnect();level.disconnect();if(h===4)gain.disconnect();};playing.push(osc);}});$('audio-status').textContent='현재 보이싱을 연주합니다.';}catch(_){$('audio-status').textContent=audioFailure}});
 // YIN: cumulative mean normalized difference, then a parabolic period estimate.
 // Kept independent of the DOM so synthetic signals can exercise the real detector in Node.
 function detectPitch(samples,sampleRate){
@@ -759,7 +834,7 @@ if(!navigator.mediaDevices?.getUserMedia||!Audio){$('mic-status').textContent='�
 const request=++micRequest;let context=null,stream=null;
 $('mic-toggle').disabled=true;$('mic-status').textContent='브라우저에서 마이크 사용을 허용해 주세요.';
 try{
-stopPlayback();context=new Audio();micContext=context;await context.resume();
+stopPlayback();setAudioSession('auto');context=new Audio();micContext=context;await context.resume();
 if(request!==micRequest)return;
 stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
 if(request!==micRequest||$('tuner-panel').hidden||document.hidden){stream.getTracks().forEach(track=>track.stop());return;}
@@ -794,15 +869,16 @@ const play=document.createElement('button');play.type='button';play.textContent=
 play.addEventListener('click',async()=>{
 stopPlayback();const request=playbackRequest;
 try{
-const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('unsupported');
-if(!audioContext)audioContext=new Audio();await audioContext.resume();if(request!==playbackRequest||$('tuner-panel').hidden)return;
-const at=audioContext.currentTime+.02,frequency=stringFrequency(index,concertA),osc=audioContext.createOscillator(),gain=audioContext.createGain();
-osc.type='sine';osc.frequency.setValueAtTime(frequency,at);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.22,at+.025);gain.gain.exponentialRampToValueAtTime(.0001,at+1.5);
-osc.connect(gain);gain.connect(audioContext.destination);osc.start(at);osc.stop(at+1.6);playing=[osc];referenceUntil=performance.now()+1950;resetTuner();
+await prepareAudio();if(request!==playbackRequest||$('tuner-panel').hidden)return;
+const at=audioContext.currentTime+.02,frequency=stringFrequency(index,concertA),gain=audioContext.createGain(),oscs=[];
+gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.2,at+.025);gain.gain.exponentialRampToValueAtTime(.0001,at+1.5);gain.connect(audioContext.destination);
+// Phone speakers barely reproduce 82-147 Hz, so soft overtones keep the same pitch audible.
+[1,.5,.35,.2].forEach((weight,k)=>{const osc=audioContext.createOscillator(),level=audioContext.createGain();osc.type='sine';osc.frequency.setValueAtTime(frequency*(k+1),at);level.gain.value=weight;osc.connect(level);level.connect(gain);osc.start(at);osc.stop(at+1.6);oscs.push(osc);osc.onended=()=>{osc.disconnect();level.disconnect();};});
+const osc=oscs[0];playing=oscs;referenceUntil=performance.now()+1950;resetTuner();
 $('tuner-advice').textContent='기준음 재생 중 · 잠시 듣고 비교하세요.';
 $('reference-status').textContent=`${6-index}번 줄 ${name} · ${frequency.toFixed(2)} Hz 재생 중`;
-osc.onended=()=>{osc.disconnect();gain.disconnect();if(request===playbackRequest){playing=[];$('reference-status').textContent='재생 완료';resetTuner();}};
-}catch(_){if(request===playbackRequest)$('reference-status').textContent='소리를 재생할 수 없습니다. 브라우저의 오디오 설정을 확인해 주세요.';}
+osc.addEventListener('ended',()=>{gain.disconnect();if(request===playbackRequest){playing=[];$('reference-status').textContent='재생 완료';resetTuner();}});
+}catch(_){if(request===playbackRequest)$('reference-status').textContent=audioFailure;}
 });
 });
 $('mic-sensitivity').addEventListener('input',()=>{
@@ -1488,7 +1564,7 @@ return true;
 // End score music functions.
 
 // Score editor: images and OCR results stay in memory on this device.
-const scoreState={image:null,codes:[],capo:0,semitones:0,mode:'capo',overlay:'replace',original:false,busy:false,adding:false,editIndex:null,pending:null,run:0};
+const scoreState={image:null,codes:[],capo:0,keyDown:0,semitones:0,mode:'capo',overlay:'replace',original:false,busy:false,adding:false,editIndex:null,pending:null,run:0};
 let scoreLibraryPromise=null,scoreRuntimePromise=null,scoreTabOpened=false;
 function openScoreTab(){
 if(scoreTabOpened)return;scoreTabOpened=true;
@@ -1603,7 +1679,7 @@ function currentScoreKey(){
 const value=$('score-key-select').value;
 return value==='auto'?detectScoreKey(scoreState.codes):transposeScoreKey({pc:Number(value.split(':')[0]),minor:value.endsWith(':m')},0);
 }
-function transformedScoreChord(text,key){return scoreState.mode==='capo'?capoScoreChord(text,scoreState.capo,key):transposeScoreChord(text,scoreState.semitones,transposeScoreKey(key,scoreState.semitones));}
+function transformedScoreChord(text,key){if(scoreState.mode==='capo'&&scoreState.keyDown)return transposeScoreChord(text,-scoreState.keyDown,transposeScoreKey(key,-scoreState.keyDown));return scoreState.mode==='capo'?capoScoreChord(text,scoreState.capo,key):transposeScoreChord(text,scoreState.semitones,transposeScoreKey(key,scoreState.semitones));}
 function scorePatchColor(bbox){
 const source=scoreState.source,ctx=source.getContext('2d'),colors=[];
 // Median of pixels just outside the glyph box avoids sampling dark letter strokes.
@@ -1638,15 +1714,15 @@ ctx.fillStyle=color.ink;ctx.fillText(text,b.x0,y,maxWidth);
 }
 function renderScore(){
 if(!scoreState.image)return;
-const key=currentScoreKey(),destination=transposeScoreKey(key,scoreState.mode==='capo'?-scoreState.capo:scoreState.semitones);
+const key=currentScoreKey(),destination=transposeScoreKey(key,scoreState.mode==='capo'?-(scoreState.keyDown||scoreState.capo):scoreState.semitones);
 $('score-key').textContent=`${$('score-key-select').value==='auto'?'감지':'선택'} 키: ${key?key.name:'—'}${$('score-key-select').value==='auto'?' (추정)':''}`;
-$('score-result-key').textContent=scoreState.mode==='capo'?`카포 ${scoreState.capo} · 원래 소리 ${key?key.name:'미정'} 유지 · 코드 모양의 키 ${destination?destination.name:'미정'} (예: G → ${capoScoreChord('G',scoreState.capo,key)})`:`${scoreState.semitones>0?'+':''}${scoreState.semitones} 반음 · 소리의 키 ${key?key.name:'미정'} → ${destination?destination.name:'미정'}`;
-$('score-capo-value').textContent=scoreState.capo===0?'카포 없음 (0)':'카포 '+scoreState.capo;
+$('score-result-key').textContent=scoreState.mode==='capo'&&scoreState.keyDown?`카포 없음 · 카포는 0보다 낮출 수 없어 키를 ${scoreState.keyDown}반음 내려 표시 · 소리의 키 ${key?key.name:'미정'} → ${destination?destination.name:'미정'} (예: G → ${transposeScoreChord('G',-scoreState.keyDown,transposeScoreKey(key,-scoreState.keyDown))})`:scoreState.mode==='capo'?`카포 ${scoreState.capo} · 원래 소리 ${key?key.name:'미정'} 유지 · 코드 모양의 키 ${destination?destination.name:'미정'} (예: G → ${capoScoreChord('G',scoreState.capo,key)})`:`${scoreState.semitones>0?'+':''}${scoreState.semitones} 반음 · 소리의 키 ${key?key.name:'미정'} → ${destination?destination.name:'미정'}`;
+$('score-capo-value').textContent=scoreState.keyDown?`카포 없음 · 키 −${scoreState.keyDown}반음`:scoreState.capo===0?'카포 없음 (0)':'카포 '+scoreState.capo;
 $('score-semi-value').textContent=`${scoreState.semitones>0?'+':''}${scoreState.semitones} 반음`;
-$('score-capo-minus').disabled=scoreState.capo===0;$('score-capo-plus').disabled=scoreState.capo===11;
+$('score-capo-minus').disabled=scoreState.capo===0&&scoreState.keyDown===11;$('score-capo-plus').disabled=scoreState.capo===11;
 $('score-semi-minus').disabled=scoreState.semitones===-11;$('score-semi-plus').disabled=scoreState.semitones===11;
 $('score-capo-controls').hidden=scoreState.mode!=='capo';$('score-transpose-controls').hidden=scoreState.mode!=='transpose';
-for(const [i,button] of [...$('score-frets').children].entries())button.setAttribute('aria-pressed',String(i===scoreState.capo));
+for(const [i,button] of [...$('score-frets').children].entries())button.setAttribute('aria-pressed',String(i===scoreState.capo&&!scoreState.keyDown));
 $('score-stage').classList.toggle('adding',scoreState.adding);
 $('score-add').textContent=scoreState.adding?'위치 선택 취소':'코드 직접 추가';
 drawScore($('score-canvas'));
@@ -1726,13 +1802,15 @@ $('score-cancel-ocr').addEventListener('click',cancelScoreOCR);
 $('score-guide-close').addEventListener('click',()=>{try{localStorage.setItem('guitarmate-score-guide',$('score-guide-skip').checked?'hide':'show');}catch(_){}$('score-guide').hidden=true;});
 $('score-help').addEventListener('click',()=>{$('score-guide').hidden=false;$('score-guide-close').focus();});
 for(let fret=0;fret<=11;fret++){
-const button=document.createElement('button'),span=document.createElement('span');button.type='button';span.textContent=fret;button.append(span);button.setAttribute('aria-label',fret===0?'카포 없음':`카포 ${fret}프렛`);button.setAttribute('aria-pressed',String(fret===0));button.addEventListener('click',()=>{scoreState.capo=fret;renderScore();});$('score-frets').append(button);
+const button=document.createElement('button'),span=document.createElement('span');button.type='button';span.textContent=fret;button.append(span);button.setAttribute('aria-label',fret===0?'카포 없음':`카포 ${fret}프렛`);button.setAttribute('aria-pressed',String(fret===0));button.addEventListener('click',()=>{scoreState.capo=fret;scoreState.keyDown=0;renderScore();});$('score-frets').append(button);
 }
 for(const minor of [false,true])for(let pc=0;pc<12;pc++){
 const option=document.createElement('option');option.value=pc+':'+(minor?'m':'M');option.textContent=transposeScoreKey({pc,minor},0).name;$('score-key-select').append(option);
 }
 $('score-key-select').addEventListener('change',renderScore);
-for(const [id,field,delta,min,max] of [['score-capo-minus','capo',-1,0,11],['score-capo-plus','capo',1,0,11],['score-semi-minus','semitones',-1,-11,11],['score-semi-plus','semitones',1,-11,11]])$(id).addEventListener('click',()=>{scoreState[field]=Math.max(min,Math.min(max,scoreState[field]+delta));renderScore();});
+$('score-capo-minus').addEventListener('click',()=>{if(scoreState.capo>0&&!scoreState.keyDown)scoreState.capo--;else scoreState.keyDown=Math.min(11,scoreState.keyDown+1);renderScore();});
+$('score-capo-plus').addEventListener('click',()=>{if(scoreState.keyDown>0)scoreState.keyDown--;else scoreState.capo=Math.min(11,scoreState.capo+1);renderScore();});
+for(const [id,field,delta,min,max] of [['score-semi-minus','semitones',-1,-11,11],['score-semi-plus','semitones',1,-11,11]])$(id).addEventListener('click',()=>{scoreState[field]=Math.max(min,Math.min(max,scoreState[field]+delta));renderScore();});
 for(const input of document.querySelectorAll('input[name="score-mode"],input[name="score-overlay"]'))input.addEventListener('change',()=>{scoreState[input.name==='score-mode'?'mode':'overlay']=input.value;renderScore();});
 $('score-original').addEventListener('change',()=>{scoreState.original=$('score-original').checked;renderScore();});
 $('score-add').addEventListener('click',()=>{scoreState.adding=!scoreState.adding;if(scoreState.adding){scoreState.original=false;$('score-original').checked=false;}renderScore();scoreStatus(scoreState.adding?'코드를 넣을 위치를 악보에서 눌러 주세요. 키보드에서는 아래 위치 입력으로 추가할 수 있어요.':'위치 선택을 취소했어요.');$('score-manual-position').hidden=!scoreState.adding;});
@@ -1802,14 +1880,17 @@ window.addEventListener('pagehide',()=>{stopMicrophone();stopPlayback();});
 activateMode();
 
 find('C');
-// Home-screen installation: native prompt on Chromium, instructions on iOS Safari.
+// Home-screen installation: native prompt on Chromium, instructions on iOS Safari and Chrome.
 const installButton=$('install-button'),installGuide=$('install-guide');
 const standalone=window.matchMedia('(display-mode: standalone)');
-const iosSafari=(/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1))&&!/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+const iosDevice=/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
+const iosChrome=iosDevice&&/CriOS/.test(navigator.userAgent);
+const iosSafari=iosDevice&&!/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+const iosGuide=iosSafari||iosChrome;
 let installPrompt=null,appInstalled=false;
 const isInstalled=()=>appInstalled||standalone.matches||navigator.standalone===true;
 function updateInstallButton(){
-installButton.hidden=isInstalled()||(!installPrompt&&!iosSafari);
+installButton.hidden=isInstalled()||(!installPrompt&&!iosGuide);
 if(isInstalled()&&installGuide.open)installGuide.close();
 }
 window.addEventListener('beforeinstallprompt',event=>{
@@ -1823,8 +1904,10 @@ if(isInstalled()){updateInstallButton();return;}
 if(installPrompt){
 const prompt=installPrompt;installPrompt=null;installButton.hidden=true;
 try{await prompt.prompt();await prompt.userChoice;}catch(_){/* A dismissed or unavailable prompt can be offered again by the browser. */}
-}else if(iosSafari&&!installGuide.open){installGuide.showModal();}
+}else if(iosGuide&&!installGuide.open){installGuide.showModal();}
 });
+if(!iosChrome&&installGuide.querySelector){const d=installGuide.querySelector('#install-guide-description');if(d)d.textContent='Safari에서 공유 메뉴로 홈 화면에 추가하세요.';const s=installGuide.querySelector('#install-step-1');if(s)s.textContent='공유 아이콘(⬆️)을 누르세요.';}
+installGuide.addEventListener('click',event=>{if(event.target===installGuide)installGuide.close();});
 updateInstallButton();
 if('serviceWorker' in navigator&&window.isSecureContext){
 window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{});});
