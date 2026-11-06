@@ -1,24 +1,28 @@
 'use strict';
 // Optional browser smoke test. Install playwright-core externally, serve this repo,
 // and set OCR_RUNTIME to a directory with tesseract.js@5.1.1 and eng.traineddata.gz.
-const assert=require('node:assert/strict'),path=require('node:path');
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {chromium}=require('playwright-core');
 async function main(){
 const runtime=process.env.OCR_RUNTIME;
 if(!runtime)throw Error('Set OCR_RUNTIME to the external OCR runtime');
+if(!process.env.OCR_REGION_MODEL||!process.env.OCR_REGION_DICTIONARY)throw Error('Set the external region model and dictionary paths');
 const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 try{
 for(const width of [360,390,768]){
 const context=await browser.newContext({viewport:{width,height:844},isMobile:true,hasTouch:true,serviceWorkers:'block',acceptDownloads:true});
-const page=await context.newPage(),errors=[],requests=[];
+const page=await context.newPage(),errors=[],requests=[];let blockRegionModel=false;
 page.on('pageerror',error=>errors.push(error.message));
 await context.route('**/*',async route=>{
 const request=route.request(),url=request.url();requests.push({url,method:request.method()});
 if(url.startsWith('http://127.0.0.1:8765/'))return route.continue();
-const packages=[['tesseract.js@5.1.1/',path.join(runtime,'node_modules/tesseract.js')],['tesseract.js-core@5.1.1/',path.join(runtime,'node_modules/tesseract.js-core')]];
+const packages=[['tesseract.js@5.1.1/',path.join(runtime,'node_modules/tesseract.js')],['tesseract.js-core@5.1.1/',path.join(runtime,'node_modules/tesseract.js-core')],['onnxruntime-web@1.20.1/',path.join(runtime,'node_modules/onnxruntime-web')]];
 for(const [prefix,dir] of packages)if(url.startsWith('https://cdn.jsdelivr.net/npm/'+prefix)){
-const file=path.join(dir,url.split(prefix)[1]);return route.fulfill({path:file,contentType:file.endsWith('.js')?'application/javascript':'application/wasm',headers:{'Access-Control-Allow-Origin':'*'}});
+const file=path.join(dir,url.split(prefix)[1]);return route.fulfill({path:file,contentType:/\.m?js$/.test(file)?'application/javascript':'application/wasm',headers:{'Access-Control-Allow-Origin':'*'}});
 }
+const modelBase='https://huggingface.co/monkt/paddleocr-onnx/resolve/7b02d0a30a07ba2b92ad1ff5a8941ae2c633de65/languages/english/';
+if(url===modelBase+'rec.onnx')return blockRegionModel?route.abort():route.fulfill({path:process.env.OCR_REGION_MODEL,contentType:'application/octet-stream',headers:{'Access-Control-Allow-Origin':'*'}});
+if(url===modelBase+'dict.txt')return blockRegionModel?route.abort():route.fulfill({path:process.env.OCR_REGION_DICTIONARY,contentType:'text/plain; charset=utf-8',headers:{'Access-Control-Allow-Origin':'*'}});
 if(url==='https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz')return route.fulfill({path:path.join(runtime,'eng.traineddata.gz'),contentType:'application/octet-stream',headers:{'Access-Control-Allow-Origin':'*'}});
 return route.abort();
 });
@@ -64,17 +68,31 @@ await page.waitForFunction(()=>!document.querySelector('#score-file').disabled);
 assert.match(await page.locator('#score-status').textContent(),/열 수 없어요/);
 assert.match(await page.locator('#score-count').textContent(),/1개/);
 assert(await page.evaluate(()=>document.body.scrollWidth<=innerWidth),'Upload overflow at '+width);
-// Only one viewport needs the real local Tesseract engine; no OCR is stubbed.
+// Run both real local engines; no OCR is stubbed.
 if(width===390){
 await context.setOffline(false);
 await page.locator('#score-file').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:Buffer.from(images.png,'base64')});
 await page.waitForFunction(()=>!document.querySelector('#score-file').disabled,{},{timeout:180000});
 const count=await page.evaluate(()=>scoreState.codes.length);
 assert(count>=4,'Real browser OCR should recognize multiple generated chords');
+assert(await page.evaluate(()=>scoreState.codes.some(code=>code.engine==='paddle'||code.engine==='tesseract-consensus')),'The region model must actually run');
 await page.locator('#score-ocr').click();await page.locator('#score-cancel-ocr').click();
 await page.waitForFunction(()=>!document.querySelector('#score-file').disabled);
 assert.equal(await page.evaluate(()=>scoreState.codes.length),count);
-console.log('Real browser Tesseract synthetic chord detections:',count);
+console.log('Real browser Paddle/Tesseract synthetic chord detections:',count);
+if(process.env.OCR_SAMPLE_IMAGE){
+await page.locator('#score-file').setInputFiles(process.env.OCR_SAMPLE_IMAGE);
+await page.waitForFunction(()=>!document.querySelector('#score-file').disabled,{},{timeout:300000});
+const codes=await page.evaluate(()=>scoreState.codes);
+assert(codes.some(code=>code.engine==='paddle'),'Private development sample must run the new engine');
+if(process.env.OCR_SAMPLE_REPORT)fs.writeFileSync(process.env.OCR_SAMPLE_REPORT,JSON.stringify({codes},null,2)+'\n');
+console.log('Private development image, real browser chord detections:',codes.length);
+}
+blockRegionModel=true;
+await page.locator('#score-file').setInputFiles({name:'fallback.png',mimeType:'image/png',buffer:Buffer.from(images.png,'base64')});
+await page.waitForFunction(()=>!document.querySelector('#score-file').disabled,{},{timeout:180000});
+assert(await page.evaluate(()=>scoreState.codes.length>=4&&scoreState.codes.every(code=>!code.engine)),'Unavailable region model must fall back to Tesseract');
+console.log('Blocked region model: real legacy fallback passed.');
 }
 assert.deepEqual(errors,[]);assert(requests.every(r=>r.method==='GET'),'Images must not be posted');
 console.log('Mobile '+width+'px: tabs, JPG/PNG upload, offline edit, capo/transpose, overlay, export, decode failure passed.');

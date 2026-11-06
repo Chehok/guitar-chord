@@ -884,6 +884,45 @@ function scoreOCRParameters(psm='11'){
 return {tessedit_char_whitelist:'ABCDEFGabcdefg#bm0123456789susaddimaugmajMIl+/()♭♯',tessedit_pageseg_mode:psm,preserve_interword_spaces:'1',user_defined_dpi:'300'};
 }
 function scoreOCRConfig(){return {load_system_dawg:'0',load_freq_dawg:'0',load_number_dawg:'0'};}
+function scoreRecognizerInput(image){
+const height=48,content=Math.max(1,Math.min(1024,Math.ceil(height*image.width/image.height))),width=Math.max(32,Math.ceil(content/8)*8);
+const resized=resizeScorePixels(image,content,height),data=new Float32Array(3*width*height);
+for(let channel=0;channel<3;channel++)for(let y=0;y<height;y++)for(let x=0;x<content;x++)data[channel*width*height+y*width+x]=resized.data[(y*content+x)*4+channel]/127.5-1;
+return {data,dims:[1,3,height,width]};
+}
+function scoreRecognizerDictionary(text){return ['',...text.replace(/\r/g,'').trimEnd().split('\n'),' '];}
+function decodeScoreRecognizer(output,dictionary){
+const [batch,steps,classes]=output.dims;
+if(batch!==1||classes!==dictionary.length)throw Error('OCR dictionary does not match model');
+let text='',previous=-1,total=0,count=0;
+for(let step=0;step<steps;step++){
+let best=0;
+for(let index=1;index<classes;index++)if(output.data[step*classes+index]>output.data[step*classes+best])best=index;
+if(best&&best!==previous){text+=dictionary[best];total+=output.data[step*classes+best];count++;}
+previous=best;
+}
+return {text,confidence:count?total/count*100:0};
+}
+function normalizeScoreRecognizer(value){
+const text=value.normalize('NFKC').trim().replace(/\s+/g,'').replace(/♭/g,'b').replace(/♯/g,'#').replace(/[⁄∕\\]/g,'/').replace(/(^|\/)\b([a-g])/g,(_,prefix,note)=>prefix+note.toUpperCase());
+return parseScoreChord(text)?text:null;
+}
+function selectScoreRegionReading(readings,secondary){
+const primary=readings.filter(r=>r.confidence>=70).sort((a,b)=>b.confidence-a.confidence||b.support-a.support)[0]||null;
+const corroborated=secondary.filter(r=>r.support>=3&&r.styles.length>=2).sort((a,b)=>b.support-a.support||b.confidence-a.confidence);
+if(!primary)return corroborated[0]||null;
+const keywordCase=text=>text.replace(/sus|add|maj|dim|aug/gi,word=>word.toLowerCase());
+for(const other of corroborated){
+if(other.text===primary.text)continue;
+// Keyword case is chosen from an actual, independently read string, never folded.
+if(keywordCase(other.text)===keywordCase(primary.text)&&other.confidence>=85)return {...other,primaryConfidence:primary.confidence};
+let index=0;
+for(const char of other.text)if(char===primary.text[index])index++;
+// Several views must actually read the extra accidental/extension before adding it.
+if(other.text.length>primary.text.length&&index===primary.text.length)return {...other,primaryConfidence:primary.confidence};
+}
+return primary;
+}
 function normalizeScoreOCR(value){
 if(typeof value!=='string')return null;
 let text=value.normalize('NFKC').trim().replace(/♭/g,'b').replace(/♯/g,'#').replace(/[⁄∕\\]/g,'/').replace(/\s+/g,'').replace(/^[|:;,]+|[|:;,.]+$/g,'');
@@ -1217,30 +1256,37 @@ if(!useStaff)candidates.push(...scoreOCRWords(data.words||[],size,source,variant
 }
 for(const [index,bbox] of regions.entries()){
 await onPass(passes.length+index,total,'region',bbox);if(!current())return [];
-let best=null,input,numericReads=0;const readings=new Map(),suffixReadings=new Map(),rootHints=new Map();
-const trials=useStaff?[[false,'7'],[false,'8'],[true,'7'],[true,'8'],['flat','7'],['flat','8'],[false,'13'],[false,'6']]:[[false,'7'],[false,'8'],[true,'7'],[true,'8']];
+let best=null,input,numericReads=0;const readings=new Map(),secondaryReadings=new Map(),suffixReadings=new Map(),rootHints=new Map();
+const regionReader=!!worker.recognizeRegion;
+const trials=regionReader?[[false,'7'],[true,'7'],['flat','7']]:useStaff?[[false,'7'],[false,'8'],[true,'7'],[true,'8'],['flat','7'],['flat','8'],[false,'13'],[false,'6']]:[[false,'7'],[false,'8'],[true,'7'],[true,'8']];
 for(const [attempt,[binary,psm]] of trials.entries()){
-if(attempt%2===0){const crop=useStaff?scoreStaffCrop(source,bbox,binary===true):scoreRegionPixels(source,bbox,binary);input=await encode(binary==='flat'?flattenScoreGlyphs(crop):crop);}
+if(regionReader||attempt%2===0){const crop=useStaff?scoreStaffCrop(source,bbox,binary===true):scoreRegionPixels(source,bbox,binary===true);const image=binary==='flat'?flattenScoreGlyphs(crop):crop;input=regionReader?image:await encode(image);}
 await worker.setParameters(scoreOCRParameters(psm));if(!current())return [];
-const {data}=await worker.recognize(input);if(!current())return [];
+const {data}=await (regionReader?worker.recognizeRegion(input):worker.recognize(input));if(!current())return [];
+for(const other of data.secondary||[]){
+const text=normalizeScoreRecognizer(other.text);if(!text)continue;
+const previous=secondaryReadings.get(text),style=binary==='flat'?'flat':binary?'binary':'gray';
+secondaryReadings.set(text,{text,confidence:Math.max(other.confidence,previous?.confidence??0),support:(previous?.support??0)+1,styles:[...new Set([...(previous?.styles||[]),style])],bbox:{...bbox},variant:'region',engine:'tesseract-consensus'});
+}
 const rawText=(data.text||((data.words||[]).map(w=>w.text).join(''))).normalize('NFKC').trim().replace(/\s+/g,'');
 if(/^\d+[.]?$/.test(rawText))numericReads++;
 const hint=/^[([]?([A-G])/.exec(rawText)?.[1];if(hint)rootHints.set(hint,(rootHints.get(hint)||0)+1);
-const text=normalizeScoreOCR(rawText)||(useStaff&&/^[acdefg]$/.test(rawText)?rawText.toUpperCase():null);
+const text=regionReader?normalizeScoreRecognizer(rawText):normalizeScoreOCR(rawText)||(useStaff&&/^[acdefg]$/.test(rawText)?rawText.toUpperCase():null);
 const suffix=rawText.replace(/^m[1Il]$/,'m7').replace(/sus[dD]$/,'sus4');
 if(useStaff&&/^(?:[#b]|m(?:7|9|11)?|M7|maj7|sus[24]|add[249]|[2579]|\/[A-G][#b]?)$/.test(suffix)){
 const previous=suffixReadings.get(suffix);suffixReadings.set(suffix,{text:suffix,support:(previous?.support||0)+1,confidence:Math.max(previous?.confidence||0,data.confidence||0),bbox});
 }
 const confidence=data.confidence??0;
 if(text){
-const previous=readings.get(text),reading={text,confidence:Math.max(confidence,previous?.confidence??0),support:(previous?.support??0)+1,styles:[...new Set([...(previous?.styles||[]),binary==='flat'?'flat':binary?'binary':'gray'])],bbox:{...bbox},variant:'region'};
+const previous=readings.get(text),reading={text,confidence:Math.max(confidence,previous?.confidence??0),support:(previous?.support??0)+1,styles:[...new Set([...(previous?.styles||[]),binary==='flat'?'flat':binary?'binary':'gray'])],bbox:{...bbox},variant:'region',...(regionReader?{engine:'paddle'}:{})};
 readings.set(text,reading);
 best=[...readings.values()].filter(w=>w.confidence>=20||w.support>=2).sort((a,b)=>b.support*10+b.confidence+b.text.length*2-(a.support*10+a.confidence+a.text.length*2))[0]||null;
 }
 // English OCR assigns music accidentals confidence zero; repeated readings still count.
 if(!useStaff&&best&&(best.confidence>=75||best.support>=2))break;
 }
-if(useStaff){
+if(regionReader){best=selectScoreRegionReading([...readings.values()],[...secondaryReadings.values()]);}
+else if(useStaff){
 const options=[...readings.values()].filter(r=>r.styles.some(style=>style!=='flat')||![...readings.values()].some(other=>other!==r&&other.styles.some(style=>style!=='flat')&&r.text.startsWith(other.text)));
 for(const reading of options)if(reading.confidence<20&&reading.support<2&&options.some(other=>other!==reading&&reading.text.startsWith(other.text)&&other.support>=1))reading.corroborated=true;
 best=options.filter(w=>w.confidence>=20||w.support>=2||w.corroborated||bbox.ink==='color').sort((a,b)=>(b.support*2+b.confidence*.05+b.text.length*12)-(a.support*2+a.confidence*.05+a.text.length*12))[0]||null;
@@ -1249,7 +1295,8 @@ if(useStaff){const suffix=[...suffixReadings.values()].filter(r=>r.support>=2||r
 if(useStaff)samples.push({bbox,numericReads,rootHint:[...rootHints].sort((a,b)=>b[1]-a[1])[0]?.[0],readings:[...readings.values()],best,signature:scoreRegionSignature(source,bbox)});
 else if(best)candidates.push(best);
 }
-if(useStaff){
+if(useStaff&&worker.recognizeRegion){for(const sample of samples)if(sample.best)candidates.push(sample.best);}
+else if(useStaff){
 // Repeated printed glyphs corroborate readings across the page, without a chord dictionary.
 const clusters=[];
 for(const sample of [...samples].sort((a,b)=>Math.max(0,...b.readings.map(r=>r.confidence))-Math.max(0,...a.readings.map(r=>r.confidence)))){
@@ -1349,7 +1396,7 @@ return true;
 
 // Score editor: images and OCR results stay in memory on this device.
 const scoreState={image:null,codes:[],capo:0,semitones:0,mode:'capo',overlay:'replace',original:false,busy:false,adding:false,editIndex:null,pending:null,run:0};
-let scoreLibraryPromise=null,scoreTabOpened=false;
+let scoreLibraryPromise=null,scoreRuntimePromise=null,scoreTabOpened=false;
 function openScoreTab(){
 if(scoreTabOpened)return;scoreTabOpened=true;
 let skip=false;try{skip=localStorage.getItem('guitarmate-score-guide')==='hide';}catch(_){}
@@ -1362,18 +1409,62 @@ $('score-add').disabled=value;$('score-stage').setAttribute('aria-busy',String(v
 $('score-cancel-ocr').hidden=!value;
 for(const button of [...$('score-hit-layer').children,...$('score-code-list').children])button.disabled=value;
 }
-function loadScoreLibrary(){
-if(window.Tesseract)return Promise.resolve(window.Tesseract);
-if(scoreLibraryPromise)return scoreLibraryPromise;
-scoreLibraryPromise=new Promise((resolve,reject)=>{
+function loadScoreLibrary(runtime=false){
+const name=runtime?'ort':'Tesseract',cached=runtime?scoreRuntimePromise:scoreLibraryPromise;
+if(window[name])return Promise.resolve(window[name]);
+if(cached)return cached;
+const promise=new Promise((resolve,reject)=>{
 const script=document.createElement('script');let settled=false;
-const finish=(error)=>{if(settled)return;settled=true;clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();reject(error);}else resolve(window.Tesseract);};
+const finish=(error)=>{if(settled)return;settled=true;clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();reject(error);}else resolve(window[name]);};
 const timer=setTimeout(()=>finish(Error('OCR library timeout')),25000);
-script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-script.crossOrigin='anonymous';script.onload=()=>finish(window.Tesseract?null:Error('OCR unavailable'));script.onerror=()=>finish(Error('OCR download failed'));
+script.src=runtime?'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js':'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+script.crossOrigin='anonymous';script.onload=()=>finish(window[name]?null:Error('OCR unavailable'));script.onerror=()=>finish(Error('OCR download failed'));
 document.head.append(script);
-}).catch(error=>{scoreLibraryPromise=null;throw error;});
-return scoreLibraryPromise;
+}).catch(error=>{if(runtime)scoreRuntimePromise=null;else scoreLibraryPromise=null;throw error;});
+if(runtime)scoreRuntimePromise=promise;else scoreLibraryPromise=promise;
+return promise;
+}
+async function loadScoreRecognizer(){
+const ort=await loadScoreLibrary(true);
+ort.env.wasm.numThreads=1;
+ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+const base='https://huggingface.co/monkt/paddleocr-onnx/resolve/7b02d0a30a07ba2b92ad1ff5a8941ae2c633de65/languages/english/';
+const responses=await Promise.all([fetch(base+'rec.onnx'),fetch(base+'dict.txt')]);
+if(responses.some(response=>!response.ok))throw Error('OCR model download failed');
+const [model,text]=await Promise.all([responses[0].arrayBuffer(),responses[1].text()]);
+const dictionary=scoreRecognizerDictionary(text),session=await ort.InferenceSession.create(model,{executionProviders:['wasm']});
+return {recognize:async image=>{
+const input=scoreRecognizerInput(image),output=await session.run({[session.inputNames[0]]:new ort.Tensor('float32',input.data,input.dims)});
+return decodeScoreRecognizer(output[session.outputNames[0]],dictionary);
+},release:()=>session.release()};
+}
+async function scoreRecognitionWorker(current,logger,encode){
+let recognizer=null,legacy=null,parameters=scoreOCRParameters(),closed=false;
+try{recognizer=await loadScoreRecognizer();}catch(_){} // Preserve the existing OCR path if WASM/model loading fails.
+if(!current()){if(recognizer)await recognizer.release();throw Error('OCR cancelled');}
+const getLegacy=async()=>{
+if(!legacy){
+const library=await loadScoreLibrary();
+if(closed||!current())throw Error('OCR cancelled');
+legacy=await library.createWorker('eng',1,{workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',langPath:'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',logger},scoreOCRConfig());
+if(closed||!current()){await legacy.terminate();throw Error('OCR cancelled');}
+await legacy.setParameters(parameters);
+}
+return legacy;
+};
+return {setParameters:async params=>{parameters=params;if(legacy)await legacy.setParameters(params);},
+recognize:async input=>(await getLegacy()).recognize(input),
+...(recognizer?{recognizeRegion:async image=>{
+const data=await recognizer.recognize(image);if(closed||!current())throw Error('OCR cancelled');
+const worker=await getLegacy(),input=await encode(image);data.secondary=[];
+for(const psm of ['7','8']){
+if(closed||!current())throw Error('OCR cancelled');
+const params=scoreOCRParameters(psm);params.tessedit_char_whitelist+='SUDJ';await worker.setParameters(params);
+const result=await worker.recognize(input);data.secondary.push({text:result.data.text||'',confidence:result.data.confidence||0,psm});
+}
+return {data};
+}}:{}),
+terminate:async()=>{closed=true;await Promise.allSettled([legacy?.terminate(),recognizer?.release()]);}};
 }
 let scoreAbortOCR=null;
 function cancelScoreOCR(){
@@ -1389,21 +1480,16 @@ const labels={color:'컬러 글씨 분리',gray:'확대·대비 보정',adaptive
 const current=()=>run===scoreState.run&&!timedOut;
 try{
 await Promise.race([(async()=>{
-const library=await loadScoreLibrary();if(!current())return;
-worker=await library.createWorker('eng',1,{
-workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
-corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
-langPath:'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
-logger:message=>{if(current()&&message.status==='recognizing text')scoreStatus(`기기 안에서 코드를 읽고 있어요… ${passIndex+1}/${passTotal} · ${labels[passVariant]} · ${Math.round((passIndex+message.progress)/passTotal*100)}%`);}
-},scoreOCRConfig());
-if(!current()){await worker.terminate();return;}
 canvas=document.createElement('canvas');
-const source=scoreState.source,pixels=source.getContext('2d').getImageData(0,0,source.width,source.height);
-const codes=await runScoreOCRPasses(worker,{data:pixels.data,width:source.width,height:source.height},image=>{
+const encode=image=>{
 canvas.width=image.width;canvas.height=image.height;
 const ctx=canvas.getContext('2d'),frame=ctx.createImageData(image.width,image.height);frame.data.set(image.data);ctx.putImageData(frame,0,0);
 return canvas;
-},async(index,total,variant)=>{
+};
+worker=await scoreRecognitionWorker(current,message=>{if(current()&&message.status==='recognizing text')scoreStatus(`기기 안에서 코드를 읽고 있어요… ${passIndex+1}/${passTotal} · ${labels[passVariant]} · ${Math.round((passIndex+message.progress)/passTotal*100)}%`);},encode);
+if(!current()){await worker.terminate();return;}
+const source=scoreState.source,pixels=source.getContext('2d').getImageData(0,0,source.width,source.height);
+const codes=await runScoreOCRPasses(worker,{data:pixels.data,width:source.width,height:source.height},encode,async(index,total,variant)=>{
 passIndex=index;passTotal=total;passVariant=variant;scoreStatus(`코드 인식 ${index+1}/${total} · ${labels[variant]} 준비 중… ${Math.round(index/total*100)}%`);
 await new Promise(resolve=>setTimeout(resolve,0));
 },current);

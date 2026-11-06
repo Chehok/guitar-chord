@@ -3,7 +3,7 @@
 // External/private reviewed labels and images stay outside the checkout.
 // NODE_PATH=... OCR_LANG_PATH=... node scripts/ocr-dataset.cjs labels-root image-root split output
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
-const {recognize,context}=require('./ocr-eval.cjs');
+const {recognize,context,encode}=require('./ocr-eval.cjs');
 
 // Maximize exact ordered occurrences, then pair unmatched spans as substitutions.
 // Labels have no token/row coordinates: this is image-level sequence alignment.
@@ -43,6 +43,12 @@ const splitFile=fs.readFileSync(path.join(labelRoot,'split.json'));
 const appFile=process.env.OCR_APP_HTML||path.join(__dirname,'../index.html');
 fs.mkdirSync(output,{recursive:true});
 const identity={split,splitSHA256:crypto.createHash('sha256').update(splitFile).digest('hex'),appSHA256:crypto.createHash('sha256').update(fs.readFileSync(appFile)).digest('hex'),tesseract:'5.1.1',langSHA256:crypto.createHash('sha256').update(fs.readFileSync(path.join(process.env.OCR_LANG_PATH,'eng.traineddata'))).digest('hex')};
+if(process.env.OCR_REGION_MODEL){
+identity.regionModelSHA256=crypto.createHash('sha256').update(fs.readFileSync(process.env.OCR_REGION_MODEL)).digest('hex');
+identity.regionDictionarySHA256=crypto.createHash('sha256').update(fs.readFileSync(process.env.OCR_REGION_DICTIONARY)).digest('hex');
+identity.regionRuntime='onnxruntime-node@1.20.1';
+identity.regionSecondary=process.env.OCR_REGION_SECONDARY==='1';
+}
 const runFile=path.join(output,'run.json');
 if(fs.existsSync(runFile)){
 const previous=JSON.parse(fs.readFileSync(runFile));
@@ -50,9 +56,25 @@ for(const [key,value] of Object.entries(identity))if(previous[key]!==value)throw
 }else fs.writeFileSync(runFile,JSON.stringify({...identity,started:new Date().toISOString()},null,2)+'\n');
 const labels=fs.readdirSync(path.join(labelRoot,'labels',split)).filter(n=>n.endsWith('.json')).sort();
 for(const name of labels)scoreReport({codes:[]},JSON.parse(fs.readFileSync(path.join(labelRoot,'labels',split,name),'utf8')));
-const cache=fs.mkdtempSync(path.join(os.tmpdir(),'score53-ocr-'));let worker;
+const cache=fs.mkdtempSync(path.join(os.tmpdir(),'score53-ocr-'));let worker,regionSession;
 try{
 worker=await Tesseract.createWorker('eng',1,{cachePath:cache,langPath:process.env.OCR_LANG_PATH,gzip:false},context.scoreOCRConfig());
+if(process.env.OCR_REGION_MODEL){
+const ort=require('onnxruntime-node'),dictionary=context.scoreRecognizerDictionary(fs.readFileSync(process.env.OCR_REGION_DICTIONARY,'utf8'));
+regionSession=await ort.InferenceSession.create(process.env.OCR_REGION_MODEL,{executionProviders:['cpu'],intraOpNumThreads:1});
+worker.recognizeRegion=async image=>{
+const input=context.scoreRecognizerInput(image),output=await regionSession.run({[regionSession.inputNames[0]]:new ort.Tensor('float32',new Float32Array(input.data),Array.from(input.dims))});
+const data=context.decodeScoreRecognizer(output[regionSession.outputNames[0]],dictionary);
+if(process.env.OCR_REGION_SECONDARY==='1'){
+const png=await encode(image);data.secondary=[];
+for(const psm of ['7','8']){
+const params=context.scoreOCRParameters(psm);params.tessedit_char_whitelist+='SUDJ';await worker.setParameters(params);
+const result=await worker.recognize(png);data.secondary.push({text:result.data.text||'',confidence:result.data.confidence||0,psm});
+}
+}
+return {data};
+};
+}
 for(const [index,name] of labels.entries()){
 const label=JSON.parse(fs.readFileSync(path.join(labelRoot,'labels',split,name),'utf8'));
 const image=path.join(imageRoot,label.source_path.endsWith('.heic')?'converted/'+path.basename(label.source_path,'.heic')+'.png':label.source_path);
@@ -65,7 +87,7 @@ report.evaluation=scoreReport(report,label);
 fs.writeFileSync(target,JSON.stringify(report,null,2)+'\n');
 console.log(`${split} ${index+1}/${labels.length} ${report.seconds.toFixed(1)}s${split==='development'?' exact='+report.evaluation.correct+'/'+report.evaluation.expected:''}`);
 }
-}finally{if(worker)await worker.terminate();fs.rmSync(cache,{recursive:true,force:true});}
+}finally{if(worker)await worker.terminate();if(regionSession)await regionSession.release();fs.rmSync(cache,{recursive:true,force:true});}
 }
 module.exports={evaluateSequence,scoreReport};
 if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});

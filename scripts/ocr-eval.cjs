@@ -56,6 +56,11 @@ const {data}=await worker.recognize(input);
 attempts.push({pass:++pass,variant,psm,bbox:regionBox,text:data.text,confidence:data.confidence,...(process.env.OCR_DEBUG?{words:(data.words||[]).map(({text,confidence,bbox})=>({text,confidence,bbox}))}:{})});
 if(process.env.OCR_VERBOSE)console.log(`${path.basename(filename)} ${pass} ${variant} PSM${psm}: ${data.text.replace(/\n/g,' ')}`);
 return {data};}};
+if(worker.recognizeRegion)adapter.recognizeRegion=async image=>{
+const {data}=await worker.recognizeRegion(image);
+attempts.push({pass:++pass,variant,engine:'paddle',psm:null,bbox:regionBox,text:data.text,confidence:data.confidence,secondary:data.secondary});
+return {data};
+};
 const codes=await context.runScoreOCRPasses(adapter,source,encode,(_index,_total,name,bbox)=>{variant=name;regionBox=bbox||null;});
 const result=codes.map(c=>({...c,bbox:{x0:c.bbox.x0*original.width/source.width,y0:c.bbox.y0*original.height/source.height,x1:c.bbox.x1*original.width/source.width,y1:c.bbox.y1*original.height/source.height}}));
 const evaluation=expected?evaluate(result,expected):null;
@@ -87,5 +92,5 @@ else console.log(r.codes.map(c=>c.text).join(' '));
 if(all){const summary=table(reports);console.log('\n'+summary);fs.writeFileSync(path.join(output,'summary.md'),summary+'\n');fs.writeFileSync(path.join(output,'summary.json'),JSON.stringify(reports.map(({attempts,codes,...r})=>r),null,2)+'\n');}
 }finally{if(worker)await worker.terminate();fs.rmSync(cache,{recursive:true,force:true});}
 }
-module.exports={evaluate,table,recognize,context};
+module.exports={evaluate,table,recognize,context,encode};
 if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});
