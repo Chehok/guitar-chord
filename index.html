@@ -748,13 +748,14 @@ function setFilters(root,kind,bass=filterBass){
 $('filter-reset').addEventListener('click',()=>{setFilters('C','M','none');if($('chord-input').value!=='C'||!current||current.label!=='C'){$('chord-input').value='C';find('C');}});
 renderFilters();
 $('prev').addEventListener('click',()=>{if(voicings.length){position=modIndex(position-1);render();}});$('next').addEventListener('click',()=>{if(voicings.length){position=modIndex(position+1);render();}});function modIndex(n){return(n+voicings.length)%voicings.length;}
-let audioContext=null,playing=[];
+let audioContext=null,playing=[],captureActive=()=>false;
 // iOS Web Audio can stay suspended/interrupted after backgrounding and is routed as "ambient" by default; prepare it on every explicit tap and fail visibly instead of reporting playback.
 function setAudioSession(type){try{if(navigator.audioSession&&navigator.audioSession.type!==type)navigator.audioSession.type=type;}catch(_){}}
 async function resumeAudio(context){if(context.state==='running')return true;try{await Promise.race([context.resume(),new Promise(resolve=>setTimeout(resolve,1500))]);}catch(_){}return context.state==='running';}
 async function prepareAudio(){
 const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('unsupported');
-setAudioSession('playback');
+// A 'playback' session ends a live microphone track (W3C Audio Session), so keep 'auto' while the tuner listens.
+setAudioSession(captureActive()?'auto':'playback');
 if(audioContext&&audioContext.state==='closed')audioContext=null;
 if(!audioContext)audioContext=new Audio();
 if(await resumeAudio(audioContext))return audioContext;
@@ -762,9 +763,13 @@ const stale=audioContext;audioContext=new Audio();try{stale.close();}catch(_){}
 if(await resumeAudio(audioContext))return audioContext;
 throw Error('audio-not-running');
 }
+// Capture switches the iOS session/route and can leave an older output context silent; rebuild it on the next tap.
+function retirePlaybackContext(){const old=audioContext;audioContext=null;if(old){try{old.close();}catch(_){}}}
+// Report failure if the context stops right after scheduling instead of leaving a false "playing" status.
+function confirmPlayback(ctx,stillCurrent,onFail){setTimeout(()=>{if(stillCurrent()&&(audioContext!==ctx||ctx.state!=='running'))onFail();},400);}
 const audioFailure='소리를 재생할 수 없습니다. 같은 버튼을 한 번 더 눌러 다시 시도하고, 계속되면 페이지를 새로고침해 주세요.';
 // Synthesis shared by chord and reference playback. Everything goes through one limiter bus so louder voices cannot clip.
-const chordLevel=.45,chordDecay=2.8,referenceLevel=.38,referenceDecay=1.7;
+const chordLevel=.45,chordDecay=2.8,referenceLevel=.36,referenceDecay=1.7;
 function audioBus(ctx){
 if(!ctx.chordBus){const comp=ctx.createDynamicsCompressor(),master=ctx.createGain();comp.threshold.value=-12;comp.knee.value=10;comp.ratio.value=12;comp.attack.value=.003;comp.release.value=.2;master.connect(comp);comp.connect(ctx.destination);ctx.chordBus=master;}
 return ctx.chordBus;
@@ -781,9 +786,11 @@ function scheduleChord(ctx,fretsList,at){
 const strings=fretsList.map((f,i)=>({f,i})).filter(s=>s.f>=0),peak=chordLevel/Math.sqrt(strings.length||1);
 return strings.map((s,n)=>scheduleTone(ctx,audioBus(ctx),440*Math.pow(2,(tuning[s.i]+s.f-69)/12),at+n*.045,peak,chordDecay,[1,1/4,1/9,1/16],.008));
 }
-function scheduleReference(ctx,frequency,at){return scheduleTone(ctx,audioBus(ctx),frequency,at,referenceLevel,referenceDecay,[1,.5,.35,.2],.025);}
+// Phone speakers barely reproduce the low-string fundamentals, so upper partials carry the pitch there.
+const referenceWeights=[1,.6,.45,.35,.25,.15];
+function scheduleReference(ctx,frequency,at){return scheduleTone(ctx,audioBus(ctx),frequency,at,referenceLevel,referenceDecay,referenceWeights,.025);}
 $('play').addEventListener('click',async()=>{const v=voicings[position];if(!v)return;try{await prepareAudio();if($('chords-panel').hidden)return;for(const node of playing){try{node.stop();}catch(_){}}playing=[];
-playing=scheduleChord(audioContext,v.frets,audioContext.currentTime+.03).map(t=>t.voice);$('audio-status').textContent='현재 보이싱을 연주합니다.';}catch(_){$('audio-status').textContent=audioFailure}});
+const ctx=audioContext,voices=scheduleChord(ctx,v.frets,ctx.currentTime+.03).map(t=>t.voice);playing=voices;$('audio-status').textContent='현재 보이싱을 연주합니다.';confirmPlayback(ctx,()=>playing===voices,()=>{$('audio-status').textContent=audioFailure;});}catch(_){$('audio-status').textContent=audioFailure}});
 // YIN: cumulative mean normalized difference, then a parabolic period estimate.
 // Kept independent of the DOM so synthetic signals can exercise the real detector in Node.
 function detectPitch(samples,sampleRate){
@@ -857,14 +864,16 @@ Array.from($('string-select').children).forEach((button,i)=>button.classList.tog
 }
 function stopPlayback(){playbackRequest++;referenceUntil=0;for(const node of playing){try{node.stop();}catch(_){}}playing=[];$('reference-status').textContent='';}
 function stopMicrophone(message='마이크가 꺼졌습니다. 다시 켜서 튜닝을 시작하세요.'){
-micRequest++;clearInterval(micTimer);micTimer=null;
+const wasCapturing=!!(micStream||micContext);micRequest++;clearInterval(micTimer);micTimer=null;
 if(micStream)micStream.getTracks().forEach(track=>track.stop());micStream=null;
 if(micSource)micSource.disconnect();micSource=null;
 if(micGain)micGain.disconnect();micGain=null;analyser=null;
 if(micContext){micContext.close().catch(()=>{});micContext=null;}
 $('mic-toggle').disabled=false;$('mic-toggle').textContent='마이크 켜기';$('mic-toggle').setAttribute('aria-pressed','false');
 $('mic-status').textContent=message;resetTuner();
+if(wasCapturing)retirePlaybackContext();
 }
+captureActive=()=>!!micStream;
 $('mic-toggle').addEventListener('click',async()=>{
 if(micStream){stopMicrophone();return;}
 if(!window.isSecureContext){$('mic-status').textContent='마이크를 사용하려면 HTTPS 주소 또는 localhost에서 열어 주세요. 기준음 듣기는 그대로 사용할 수 있어요.';return;}
@@ -873,7 +882,7 @@ if(!navigator.mediaDevices?.getUserMedia||!Audio){$('mic-status').textContent='�
 const request=++micRequest;let context=null,stream=null;
 $('mic-toggle').disabled=true;$('mic-status').textContent='브라우저에서 마이크 사용을 허용해 주세요.';
 try{
-stopPlayback();setAudioSession('auto');context=new Audio();micContext=context;await context.resume();
+stopPlayback();retirePlaybackContext();setAudioSession('auto');context=new Audio();micContext=context;await context.resume();
 if(request!==micRequest)return;
 stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
 if(request!==micRequest||$('tuner-panel').hidden||document.hidden){stream.getTracks().forEach(track=>track.stop());return;}
@@ -914,6 +923,7 @@ const osc=tone.oscs[0];playing=[tone.voice];referenceUntil=performance.now()+215
 $('tuner-advice').textContent='기준음 재생 중 · 잠시 듣고 비교하세요.';
 $('reference-status').textContent=`${6-index}번 줄 ${name} · ${frequency.toFixed(2)} Hz 재생 중`;
 osc.addEventListener('ended',()=>{if(request===playbackRequest){playing=[];$('reference-status').textContent='재생 완료';resetTuner();}});
+confirmPlayback(audioContext,()=>request===playbackRequest,()=>{$('reference-status').textContent=audioFailure;});
 }catch(_){if(request===playbackRequest)$('reference-status').textContent=audioFailure;}
 });
 });
