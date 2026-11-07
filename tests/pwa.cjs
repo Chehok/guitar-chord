@@ -78,6 +78,7 @@ async function checkScope(scope){
 }
 (async()=>{
   await checkScope('https://example.github.io/guitar-chord/');
+  await checkScope('https://example.github.io/guitar-mate/');
   await checkScope('https://example.github.io/');
   console.log('PWA manifest, PNG dimensions, offline shell, subpath scope and cache replacement passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
